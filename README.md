@@ -7,7 +7,6 @@ temperatures — designed to fill a **1280x400** mini-rack touchscreen, but usab
 Other machines on the network can push their own stats to the hub, and you can tap to switch which
 host you're viewing.
 
-![michka dashboard on the rack panel](docs/dashboard.png)
 
 ## Features
 
