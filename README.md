@@ -7,6 +7,11 @@ temperatures — designed to fill a **1280x400** mini-rack touchscreen, but usab
 Other machines on the network can push their own stats to the hub, and you can tap to switch which
 host you're viewing.
 
+<img width="939" height="257" alt="Image" src="https://github.com/user-attachments/assets/09d7833a-c52c-458c-9522-6a70e30ebc99" />
+<img width="1454" height="460" alt="Image" src="https://github.com/user-attachments/assets/84dc22f5-c8f4-438f-8d53-cb6fd48bf1a8" />
+<img width="1451" height="454" alt="Image" src="https://github.com/user-attachments/assets/18b6955b-9adc-418e-8444-0be10277fad0" />
+<img width="1450" height="456" alt="Image" src="https://github.com/user-attachments/assets/6e4686bf-f070-442a-8d21-21aa4d609aa1" />
+<img width="1450" height="455" alt="Image" src="https://github.com/user-attachments/assets/e00b3bb3-10a8-4a39-a5d4-df80e4c3ce7c" />
 
 ## Features
 
