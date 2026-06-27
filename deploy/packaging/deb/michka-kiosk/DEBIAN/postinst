@@ -1,0 +1,31 @@
+#!/bin/sh
+# michka-kiosk postinst: enable the kiosk unit, switch the hub to root (drop-in shipped with this
+# package), and start the display. The hub restart picks up the kiosk.conf override.
+set -e
+
+case "$1" in
+  configure)
+    chmod 0755 /opt/michka/kiosk.sh 2>/dev/null || true
+
+    if [ -d /run/systemd/system ]; then
+      systemctl daemon-reload >/dev/null 2>&1 || true
+      # Re-launch the hub as root so it can drive the kiosk's Wayland session.
+      systemctl restart michka-hub.service >/dev/null 2>&1 || true
+      systemctl enable michka-kiosk.service >/dev/null 2>&1 || true
+      systemctl start michka-kiosk.service >/dev/null 2>&1 || true
+    fi
+
+    # Print a summary so the apt/dpkg output tells the user what was installed and where.
+    ver=$(dpkg-query -f '${Version}' -W michka-kiosk 2>/dev/null || echo "")
+    echo ""
+    echo "  Michka kiosk${ver:+ $ver} installed (touchscreen appliance add-on)."
+    echo "    Launcher : /opt/michka/kiosk.sh"
+    echo "    Service  : michka-kiosk.service  (cage + Chromium on tty1, enabled at boot)"
+    echo "    Note     : the hub now runs as root so it can drive the local display."
+    echo "    Status   : sudo systemctl status michka-kiosk"
+    echo "    Website  : michka.org"
+    echo ""
+    ;;
+esac
+
+exit 0

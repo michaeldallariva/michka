@@ -1,0 +1,57 @@
+#!/bin/sh
+# michka-hub postinst: create the service user + data dir, then enable and (re)start the hub.
+set -e
+
+case "$1" in
+  configure)
+    # Unprivileged system user the hub runs as (no login, no home creation).
+    if ! getent passwd michka >/dev/null 2>&1; then
+      adduser --system --group --no-create-home --home /var/lib/michka \
+              --shell /usr/sbin/nologin --quiet michka || \
+      useradd --system --home-dir /var/lib/michka --shell /usr/sbin/nologin michka || true
+    fi
+
+    mkdir -p /var/lib/michka
+    chown michka:michka /var/lib/michka
+    chmod 0755 /opt/michka/michka_s 2>/dev/null || true
+
+    # Seed the on-disk templates + widgets shipped under /opt into the data dir the hub reads from
+    # (<dataDir>/{templates,widgets}). Per-folder, never clobbering a drop-in the user changed or
+    # added, so upgrades keep customisations. New default drop-ins appear; existing ones are left be.
+    for kind in templates widgets; do
+      src="/opt/michka/$kind"
+      dst="/var/lib/michka/$kind"
+      [ -d "$src" ] || continue
+      mkdir -p "$dst"
+      for d in "$src"/*/; do
+        [ -d "$d" ] || continue
+        name=$(basename "$d")
+        [ -e "$dst/$name" ] || cp -r "$d" "$dst/$name"
+      done
+      chown -R michka:michka "$dst" 2>/dev/null || true
+    done
+
+    if [ -d /run/systemd/system ]; then
+      systemctl daemon-reload >/dev/null 2>&1 || true
+      systemctl enable michka-hub.service >/dev/null 2>&1 || true
+      systemctl restart michka-hub.service >/dev/null 2>&1 || true
+    fi
+
+    # Print a summary so the apt/dpkg output tells the user what was installed and where.
+    ver=$(dpkg-query -f '${Version}' -W michka-hub 2>/dev/null || echo "")
+    ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    [ -n "$ip" ] || ip="<this-host>"
+    echo ""
+    echo "  Michka hub${ver:+ $ver} installed."
+    echo "    Binary    : /opt/michka/michka_s"
+    echo "    Data dir  : /var/lib/michka  (michka.db, michka.conf — created on first run)"
+    echo "    Service   : michka-hub.service  (runs as user 'michka', enabled at boot)"
+    echo "    Dashboard : http://${ip}:5000  (default port; change it in michka.conf or the Settings page)"
+    echo "    Status    : sudo systemctl status michka-hub"
+    echo "    Logs      : sudo journalctl -u michka-hub -b"
+    echo "    Authors   : Michael DALLA RIVA / Patrick DUQUESNOY      Website: michka.org"
+    echo ""
+    ;;
+esac
+
+exit 0

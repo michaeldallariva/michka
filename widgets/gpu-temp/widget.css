@@ -1,0 +1,42 @@
+/* GPU widget. Uses the shared theme tokens (var(--text)/(--muted)/(--blue)/(--cyan)/(--orange)/(--red))
+   so active templates re-skin it. Flat colours only — no gradients. Laid out to fill a full-height
+   dashboard box: big temperature up top, then utilisation + memory rows with flat bars below. */
+/* Top-anchor the body so content sits directly under the header divider with the same spacing as the
+   metric boxes (CPU/Network/Disks), instead of floating in the vertical centre. */
+.widget-gpu-temp .widget-body { display: flex; align-items: flex-start; }
+
+.gput {
+  display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
+  gap: 10px; width: 100%;
+}
+
+/* Temperature — the headline reading, centred. */
+.gput-temp {
+  font-size: 42px; font-weight: 800; line-height: 1; text-align: center;
+  font-variant-numeric: tabular-nums; color: var(--text);
+}
+.gput-temp .gput-deg { font-size: 18px; font-weight: 600; color: var(--muted); margin-left: 3px; }
+.gput-temp.warm { color: var(--orange); }
+.gput-temp.hot { color: var(--red); }
+
+.gput-name {
+  font-size: 12px; color: var(--muted); text-align: center; max-width: 100%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: -4px;
+}
+
+/* Utilisation + memory rows. */
+.gput-rows { display: flex; flex-direction: column; gap: 9px; margin-top: 2px; }
+.gput-row[hidden] { display: none; }
+.gput-rowhead { display: flex; justify-content: space-between; align-items: baseline; }
+.gput-k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+.gput-v { font-size: 14px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+
+.gput-bar {
+  margin-top: 4px; height: 7px; border-radius: 4px; overflow: hidden;
+  background: rgba(255, 255, 255, 0.07);
+}
+.gput-fill { height: 100%; border-radius: 4px; transition: width .35s ease; }
+.gput-fill.util { background: var(--blue); }
+.gput-fill.mem { background: var(--cyan); }
+
+.gput-msg { font-size: 11px; color: var(--muted); text-align: center; }

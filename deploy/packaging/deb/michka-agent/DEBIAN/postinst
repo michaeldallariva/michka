@@ -1,0 +1,39 @@
+#!/bin/sh
+# michka-agent postinst: create the service user, enable the agent, and start it once a hub is set.
+set -e
+
+case "$1" in
+  configure)
+    if ! getent passwd michka >/dev/null 2>&1; then
+      adduser --system --group --no-create-home --home /var/lib/michka \
+              --shell /usr/sbin/nologin --quiet michka || \
+      useradd --system --home-dir /var/lib/michka --shell /usr/sbin/nologin michka || true
+    fi
+    chmod 0755 /opt/michka/michka_c 2>/dev/null || true
+
+    if [ -d /run/systemd/system ]; then
+      systemctl daemon-reload >/dev/null 2>&1 || true
+      systemctl enable michka-agent.service >/dev/null 2>&1 || true
+      # Don't start (and restart-loop) until the placeholder hub has been replaced.
+      if grep -q 'HUB-HOST' /etc/default/michka-agent 2>/dev/null; then
+        started="not started — set the hub first (see Config below)"
+      else
+        systemctl restart michka-agent.service >/dev/null 2>&1 || true
+        started="started (enabled at boot)"
+      fi
+    fi
+
+    # Print a summary so the apt/dpkg output tells the user what was installed and where.
+    ver=$(dpkg-query -f '${Version}' -W michka-agent 2>/dev/null || echo "")
+    echo ""
+    echo "  Michka agent${ver:+ $ver} installed."
+    echo "    Binary  : /opt/michka/michka_c"
+    echo "    Config  : /etc/default/michka-agent  (set MICHKA_ARGS, e.g. --hub http://HUB-HOST:5000)"
+    echo "    Service : michka-agent.service  (runs as user 'michka') — ${started}"
+    echo "    Status  : sudo systemctl status michka-agent"
+    echo "    Authors : Michael DALLA RIVA / Patrick DUQUESNOY      Website: michka.org"
+    echo ""
+    ;;
+esac
+
+exit 0

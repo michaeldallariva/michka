@@ -1,0 +1,14 @@
+#!/bin/sh
+# michka-agent prerm: stop + disable the agent before its files go away.
+set -e
+
+case "$1" in
+  remove|deconfigure)
+    if [ -d /run/systemd/system ]; then
+      systemctl stop michka-agent.service >/dev/null 2>&1 || true
+      systemctl disable michka-agent.service >/dev/null 2>&1 || true
+    fi
+    ;;
+esac
+
+exit 0

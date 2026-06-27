@@ -1,0 +1,51 @@
+Michka — Cross-platform Hardware Monitor Dashboard
+Copyright (c) 2025–2026 michka.org
+Authors : Michael DALLA RIVA / Patrick DUQUESNOY
+Updated : 27-June-2026
+
+================================================================================
+MICHKA LICENSE
+================================================================================
+
+This software is released under the Creative Commons
+Attribution-NonCommercial-NoDerivatives 4.0 International (CC BY-NC-ND 4.0).
+
+  You may share it freely. You may NOT use it commercially, and you may NOT
+  distribute modified versions.
+
+  Full license: https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode
+
+================================================================================
+THIRD-PARTY COMPONENTS
+================================================================================
+
+Michka bundles or depends on the following open-source libraries. Components
+marked [Windows] ship only in the Windows client (michka_c.exe); components
+marked [frontend] are JavaScript assets embedded in the dashboard.
+
+  Package / Library                                  License        Copyright
+  ─────────────────────────────────────────────────  ─────────────  ─────────────────────────────────────────
+  .NET 10 Runtime & ASP.NET Core                     MIT            .NET Foundation and Contributors
+  Microsoft.Data.Sqlite 10.0.x                       MIT            .NET Foundation and Contributors
+  Microsoft.Extensions.FileProviders.Embedded 10.0.x MIT            .NET Foundation and Contributors
+  Microsoft.Extensions.Hosting.WindowsServices 10.0.x  [Windows]    .NET Foundation and Contributors        (MIT)
+  System.Management 10.0.x  [Windows]                MIT            .NET Foundation and Contributors
+  ─────────────────────────────────────────────────  ─────────────  ─────────────────────────────────────────
+  SQLitePCLRaw 2.x (bundle_e_sqlite3, transitive)    Apache-2.0     Eric Sink / SQLitePCLRaw contributors
+  Apache ECharts 5.x  [frontend]                     Apache-2.0     The Apache Software Foundation
+  ─────────────────────────────────────────────────  ─────────────  ─────────────────────────────────────────
+  SQLite database engine (native e_sqlite3)          Public Domain  D. Richard Hipp / SQLite authors
+  ─────────────────────────────────────────────────  ─────────────  ─────────────────────────────────────────
+
+The Windows client additionally calls native Windows OS components (gdi32 /
+D3DKMT for GPU telemetry, pdh.dll performance counters, WMI, and sc.exe for
+service control). These are part of Microsoft Windows and are not bundled or
+redistributed by Michka.
+
+--------------------------------------------------------------------------------
+License texts:
+  MIT            https://opensource.org/licenses/MIT
+  Apache-2.0     https://www.apache.org/licenses/LICENSE-2.0
+  Public Domain  https://www.sqlite.org/copyright.html
+  CC BY-NC-ND    https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode
+================================================================================

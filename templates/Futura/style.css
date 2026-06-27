@@ -1,0 +1,65 @@
+/* ============================================================================
+   Futura — "new design" template overlay.
+
+   The DEFAULT (built-in) dashboard is the classic Futura look: grey sensor-panel
+   skin, big top-left clock, and gauge/line/vertical-bar metric boxes. Selecting
+   THIS template layers a modern redesign of the CPU / Network / Disks boxes on
+   top: a big headline number, stat "chips", and flat-colour column-stream charts
+   (CPU + Network) plus single-row horizontal pill bars (Disks).
+
+   The skin (grey bubbles, clock, Pac-Man/skull glyphs) already comes from the
+   default, so this file only needs to: (1) hide the default gauges/line the new
+   charts replace, and (2) style the elements that script.js injects. Plain solid
+   colours only — no gradients. Box dimensions are unchanged.
+   ============================================================================ */
+
+/* script.js sets body.futura-design while this template is active. Hide the default CPU gauge +
+   per-core bars, the Network line chart, and the Network header speeds — the injected column charts
+   replace them. */
+body.futura-design .box-cpu .gauge-card { display: none; }
+body.futura-design .box-net > .card-body { display: none; }
+body.futura-design .box-net .metric-pair { display: none; }
+
+/* Injected chart container fills the rest of the (fixed-size) box. */
+.f-cpu, .f-net { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; width: 100%; }
+
+/* Headline reading (CPU load %, Network total throughput). */
+.f-hero { flex: 0 0 auto; text-align: center; margin-bottom: 8px; }
+.f-big {
+  font-size: calc(40px * var(--ui-scale, 1)); font-weight: 800; line-height: 1;
+  color: var(--text); font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* The network headline carries a unit ("12 MB/s") — a step smaller so it never clips. */
+.box-net .f-big { font-size: calc(30px * var(--ui-scale, 1)); }
+.f-sub {
+  margin-top: 3px; font-size: calc(11px * var(--ui-scale, 1));
+  text-transform: uppercase; letter-spacing: 2px; color: var(--muted);
+}
+
+/* Stat chips (PEAK / LOW, RX / TX): sharp bordered pills, flat fills. */
+.f-chips { flex: 0 0 auto; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 10px; }
+.f-chip {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 4px 12px; border: 1px solid var(--f-edge); border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03); min-width: 58px;
+}
+.f-k { font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.f-v { font-size: calc(15px * var(--ui-scale, 1)); font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text); }
+.f-v.cyan { color: var(--cyan); }
+.f-v.orange { color: var(--orange); }
+.f-v.green { color: var(--green); }
+
+/* The injected ECharts canvas fills the remaining height. */
+.f-chart { flex: 1 1 auto; min-height: 0; width: 100%; }
+
+/* Disks: restyle the default vertical rows into single horizontal pill rows (CSS only — script.js
+   doesn't touch the disk box). The default markup is [.top(.mnt,.cap)] + [.track(.fill)]; lay it out
+   as [label stack | long pill bar] and fatten the bar. */
+body.futura-design .box-storage .disk {
+  display: grid; grid-template-columns: 70px 1fr; align-items: center; column-gap: 10px;
+}
+body.futura-design .box-storage .disk .top { flex-direction: column; align-items: flex-start; gap: 0; min-width: 0; }
+body.futura-design .box-storage .disk .top .mnt { font-size: 12px; }
+body.futura-design .box-storage .disk .top .cap { font-size: 9.5px; }
+body.futura-design .box-storage .disk .track { height: 14px; }

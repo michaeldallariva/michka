@@ -1,0 +1,21 @@
+# Build output
+bin/
+obj/
+out/
+publish/
+dist/
+*.user
+*.suo
+
+# Runtime data (per-device, created on first run)
+michka.conf
+michka_c.conf
+*.db
+*.db-shm
+*.db-wal
+
+# IDE / OS
+.vs/
+.idea/
+.DS_Store
+Thumbs.db

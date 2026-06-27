@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <!-- Windows builds (the GUI/service client) target a -windows TFM so WinForms is available;
+         every other build (the Linux hub/agent) stays on plain net10.0. RuntimeIdentifier is a
+         global property at publish time, so `-r win-x64` selects the desktop TFM automatically. -->
+    <TargetFramework Condition="'$(RuntimeIdentifier)' == 'win-x64'">net10.0-windows</TargetFramework>
+    <TargetFramework Condition="'$(TargetFramework)' == ''">net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>monitor</AssemblyName>
+    <RootNamespace>Monitor</RootNamespace>
+    <OutputType>Exe</OutputType>
+
+    <!-- Single self-contained binary settings (applied at publish time) -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- Compress the bundled runtime + assemblies inside the single file (roughly halves it for a
+         small one-time startup decompression cost); keeps it one self-contained exe. -->
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- Keep the published output to a single file: embed debug symbols (no .pdb) and skip the
+         IIS web.config (the app self-hosts Kestrel / runs as an agent, so it's never needed). -->
+    <DebugType>embedded</DebugType>
+    <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
+
+    <!-- Embed wwwroot into the assembly so the UI ships inside the one binary.
+         Disable the static-web-assets pipeline + default Content globs so the
+         dashboard exists ONLY as embedded resources (no external manifest/files). -->
+    <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+    <EnableDefaultContentItems>false</EnableDefaultContentItems>
+  </PropertyGroup>
+
+  <!-- Windows-only: WinForms GUI + Windows-service hosting for the michka_c client. The WINDOWS_GUI
+       constant gates the desktop-only source (Gui/, the service runner) so the Linux build skips it. -->
+  <PropertyGroup Condition="$(TargetFramework.EndsWith('-windows'))">
+    <UseWindowsForms>true</UseWindowsForms>
+    <DefineConstants>$(DefineConstants);WINDOWS_GUI</DefineConstants>
+    <!-- Network-nodes icon (dark-orange links, green nodes) embedded in the michka_c.exe PE header.
+         Windows-only: ELF Linux binaries don't carry icons, so this is gated to the -windows build. -->
+    <ApplicationIcon>icon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$(TargetFramework.EndsWith('-windows'))">
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.3" />
+    <!-- WMI: CPU thermal zones (MSAcpi_ThermalZoneTemperature) + processor queue length for the
+         Windows load-average analog. Windows-only, so it's gated behind the WINDOWS_GUI constant. -->
+    <PackageReference Include="System.Management" Version="10.0.3" />
+    <!-- Also embed the app icon so the GUI can render it at any size (form icon + About box logo);
+         the PE-header ApplicationIcon alone isn't readable back at runtime. Windows build only. -->
+    <EmbeddedResource Include="icon.ico" LogicalName="Monitor.icon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Ship the dashboard assets embedded in the binary -->
+    <EmbeddedResource Include="wwwroot\**\*" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,13 @@
+Package: michka-agent
+Version: __VERSION__
+Section: net
+Priority: optional
+Architecture: amd64
+Maintainer: Michka <michka@localhost>
+Depends: libc6, libgcc-s1, libstdc++6, zlib1g, adduser
+Description: Michka monitor agent (Linux client)
+ Collects this machine's CPU / memory / network / disk / temperature metrics and pushes them to a
+ Michka hub on an interval. No web server. Self-contained (the .NET runtime is bundled).
+ .
+ Set the hub URL in /etc/default/michka-agent (MICHKA_ARGS) and start the michka-agent service.
+ The host then appears as its own tab on the hub's dashboard.

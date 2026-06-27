@@ -1,0 +1,16 @@
+#!/bin/sh
+# michka-hub postrm: reload units after removal; on purge drop the data dir + service user.
+set -e
+
+if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload >/dev/null 2>&1 || true
+fi
+
+if [ "$1" = "purge" ]; then
+  rm -rf /var/lib/michka
+  if getent passwd michka >/dev/null 2>&1; then
+    deluser --quiet --system michka >/dev/null 2>&1 || userdel michka >/dev/null 2>&1 || true
+  fi
+fi
+
+exit 0

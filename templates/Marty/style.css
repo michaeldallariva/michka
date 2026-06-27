@@ -1,0 +1,153 @@
+/* ============================================================================
+   Marty — a "Back to the Future" time-circuits template.
+
+   Re-skins the dashboard as the DeLorean's time-circuit display: brushed dark-
+   metal panels with bright 7-segment-style LED readouts showing NUMBERS ONLY
+   (no gauges, no charts). Each metric box gets its own bright colour, like the
+   movie's red / green / amber rows. Pairs with script.js, which hides the default
+   gauges/charts and injects the LED readouts, driven from the app's live data.
+
+   The big numbers are sized in container-query units (cqw) so they fill the box
+   width whatever its size, and the leftover vertical space carries extra info
+   (CPU model/cores, RAM used/total). Digit colours are flat + bright (a soft glow
+   via text-shadow, not a gradient); only the panel BACKGROUND uses metallic
+   surface shading. Box dimensions are unchanged. script.js sets body.marty-design.
+   ============================================================================ */
+
+/* ---- pure-black general background (override the base's blue/purple radial tints) ---- */
+body.marty-design { background: #000; }
+
+/* ---- brushed dark-metal panels (30% darker grey than the original Marty panels) ---- */
+body.marty-design .board .box,
+body.marty-design .card {
+  background-color: #1e2024;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 4px),
+    linear-gradient(180deg, #2a2d31 0%, #222427 45%, #1a1c1f 100%);
+  border: 1px solid #383b40;
+  border-radius: 8px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.55),
+    0 4px 12px rgba(0, 0, 0, 0.5);
+  backdrop-filter: none;
+  overflow: hidden;   /* safety: readouts are sized to fit, but never let anything spill the panel */
+}
+body.marty-design .board .box::before { display: none; }
+
+/* ---- clock box: bright Intel-logo blue panel (#0071c5), set apart from the grey metric panels ---- */
+body.marty-design .futura-clock {
+  background: linear-gradient(180deg, #0a84e0 0%, #0071c5 100%);
+  border: 1px solid #3aa0ee;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.4),
+    0 4px 12px rgba(0, 0, 0, 0.5);
+}
+body.marty-design .futura-clock .fc-date { color: #cfe3fb; }
+
+/* ---- top-header host tabs: same Intel-blue panel as the clock (active one a touch brighter) ---- */
+body.marty-design .host-tabs .tab {
+  background: linear-gradient(180deg, #0a84e0 0%, #0071c5 100%);
+  border: 1px solid #3aa0ee;
+  color: #eaf3ff;
+}
+body.marty-design .host-tabs .tab.active {
+  background: linear-gradient(180deg, #2a9bf0 0%, #0a84e0 100%);
+  border-color: #6cc0ff;
+  color: #fff;
+}
+
+/* Header: small riveted-label look, no white squares. */
+body.marty-design .card-head { border-bottom-color: rgba(255, 255, 255, 0.12); }
+body.marty-design .card-head h2 { color: #d3d6dc; font-size: calc(12px * var(--ui-scale, 1)); letter-spacing: 3px; }
+body.marty-design .card-head h2::before,
+body.marty-design .card-head h2::after { display: none; }
+
+/* ---- hide the default gauge/line/bar bodies the LED readout replaces ---- */
+body.marty-design .box-cpu > .card-body,
+body.marty-design .box-mem > .card-body,
+body.marty-design .box-net > .card-body,
+body.marty-design .box-temp > .card-body,
+body.marty-design .box-storage > .card-body { display: none; }
+body.marty-design .box-cpu .cpu-meta,
+body.marty-design .box-net .metric-pair { display: none; }
+
+/* ---- LED readouts (injected by script.js) ---- */
+.marty {
+  display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0;
+  align-items: center; justify-content: center; gap: 10px; width: 100%;
+}
+.marty-readout { display: flex; flex-direction: column; align-items: center; gap: 2px; max-width: 100%; }
+.marty-label {
+  font: 700 calc(12px * var(--ui-scale, 1)) / 1 "Arial Narrow", "Roboto Condensed", Arial, sans-serif;
+  letter-spacing: 3px; text-transform: uppercase; color: #cdd0d6;
+}
+/* The digits: a monospace face styled as a glowing segmented readout, with a dim
+   "ghost" copy behind (the unlit segments). ONE fixed size for every single-value
+   box (CPU / Memory / Temp / GPU) so they all match — sized to fit the narrowest
+   box's "100%". Network + Disks override smaller below (they show several numbers). */
+.marty-num {
+  position: relative; display: inline-block;
+  font-family: "DSEG7 Classic", "DSEG14 Classic", Consolas, "Liberation Mono", ui-monospace, monospace;
+  font-weight: 700; line-height: 0.9; letter-spacing: 2px;
+  font-size: calc(64px * var(--ui-scale, 1));
+}
+.marty-num .ghost { position: absolute; left: 0; top: 0; white-space: pre; }
+.marty-num .on { position: relative; white-space: pre; }
+
+/* CPU + GPU sit in the wider boxes, so their main number is a step larger (~20%). Still narrow
+   enough that a 3-digit "100%" stays inside the box. Memory/Temp keep the base size (their boxes
+   are narrower and can't fit a bigger "100%"). */
+.marty.cpu .marty-num { font-size: calc(77px * var(--ui-scale, 1)); }
+
+/* Secondary info (CPU model/cores, RAM used/total) fills the leftover height. */
+.marty-info { display: flex; flex-direction: column; align-items: center; gap: 2px; max-width: 100%; }
+.marty-iline {
+  font: 600 calc(13px * var(--ui-scale, 1)) / 1.25 "Arial Narrow", Arial, sans-serif;
+  color: #aeb2ba; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.marty-iline.lead { color: #e7eaf0; font-size: calc(14px * var(--ui-scale, 1)); letter-spacing: 0.5px; }
+
+/* Per-box bright colours (flat + glow). */
+.marty.cpu  .on { color: #ff3b30; text-shadow: 0 0 12px rgba(255, 59, 48, 0.55); }
+.marty.cpu  .ghost { color: rgba(255, 59, 48, 0.12); }
+.marty.mem  .on { color: #3dff63; text-shadow: 0 0 12px rgba(61, 255, 99, 0.50); }
+.marty.mem  .ghost { color: rgba(61, 255, 99, 0.12); }
+.marty.net  .on { color: #ffb01f; text-shadow: 0 0 12px rgba(255, 176, 31, 0.50); }
+.marty.net  .ghost { color: rgba(255, 176, 31, 0.12); }
+.marty.disks .on { color: #1fd6ff; text-shadow: 0 0 12px rgba(31, 214, 255, 0.50); }
+.marty.disks .ghost { color: rgba(31, 214, 255, 0.12); }
+.marty.temp .on { color: #ff6a1f; text-shadow: 0 0 12px rgba(255, 106, 31, 0.50); }
+.marty.temp .ghost { color: rgba(255, 106, 31, 0.12); }
+
+/* EXCEPTIONS — Network + Disks show several numbers, so they're smaller. */
+/* Network rates carry a unit (longer string) and stack two rows. */
+.marty.net { gap: 16px; }
+.marty.net .marty-num { font-size: calc(34px * var(--ui-scale, 1)); }
+/* Per-disk rows: label + value side by side, one row per mount. The row font + gap come from CSS
+   vars that script.js sets from the disk count, so 2..5 disks stay centred AND fit the box. */
+.marty.disks { gap: var(--disk-gap, 14px); justify-content: center; }
+.marty.disks .marty-readout { flex-direction: row; align-items: baseline; gap: 12px; width: 100%; justify-content: center; }
+.marty.disks .marty-label { min-width: 46px; text-align: right; }
+.marty.disks .marty-num { font-size: calc(var(--disk-fs, 40px) * var(--ui-scale, 1)); }
+
+/* ---- GPU drop-in widget: numbers-only LED restyle (CSS; the widget keeps polling) ---- */
+body.marty-design .widget-gpu-temp .gput-bar { display: none; }
+body.marty-design .widget-gpu-temp .gput-name { color: #cdd0d6; font-size: 13px; }
+body.marty-design .widget-gpu-temp .gput-rows { gap: 10px; margin-top: 8px; }
+/* Row = label left, LED value right (one line, never wrapping), with breathing room between. */
+body.marty-design .widget-gpu-temp .gput-rowhead { gap: 14px; align-items: baseline; flex-wrap: nowrap; }
+body.marty-design .widget-gpu-temp .gput-k { color: #cdd0d6; font-size: 13px; white-space: nowrap; }
+body.marty-design .widget-gpu-temp .gput-v { text-align: right; white-space: nowrap; }
+body.marty-design .widget-gpu-temp .gput-temp,
+body.marty-design .widget-gpu-temp .gput-v {
+  font-family: "DSEG7 Classic", Consolas, "Liberation Mono", ui-monospace, monospace;
+}
+body.marty-design .widget-gpu-temp .gput-temp { font-size: calc(77px * var(--ui-scale, 1)); color: #3dff63; text-shadow: 0 0 12px rgba(61, 255, 99, 0.5); }
+body.marty-design .widget-gpu-temp .gput-v { font-size: 20px; color: #3dff63; text-shadow: 0 0 10px rgba(61, 255, 99, 0.5); }
+/* The memory readout is a long "x / y GB" string — shrink it so it fits on one right-aligned line. */
+body.marty-design .widget-gpu-temp [data-mem] { font-size: 15px; letter-spacing: 0; }
+body.marty-design .widget-gpu-temp .gput-temp.warm { color: #ffb01f; text-shadow: 0 0 12px rgba(255, 176, 31, 0.5); }
+body.marty-design .widget-gpu-temp .gput-temp.hot { color: #ff3b30; text-shadow: 0 0 12px rgba(255, 59, 48, 0.55); }
+body.marty-design .widget-gpu-temp .gput-deg { color: #cdd0d6; text-shadow: none; font-size: 20px; }

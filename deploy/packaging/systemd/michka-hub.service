@@ -1,0 +1,33 @@
+[Unit]
+Description=Michka hardware monitor hub
+Documentation=https://github.com/  (see /opt/michka and the Michka README)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Headless servers run the hub as an unprivileged system user. The kiosk add-on installs a drop-in
+# (michka-hub.service.d/kiosk.conf) that flips this to root so the hub can drive the local display
+# (screen power, kiosk restart, exit-to-login). Without the kiosk those controls are simply no-ops.
+User=michka
+Group=michka
+WorkingDirectory=/var/lib/michka
+# /var/lib/michka is created + owned by systemd for the service user.
+StateDirectory=michka
+# Cache dir for the self-contained binary's startup extraction of bundled native libs. It MUST sit on
+# an exec-mounted filesystem: /run is a tmpfs that is frequently mounted noexec (nosuid,nodev,noexec),
+# which makes dlopen() of the unpacked native libs (e_sqlite3) fail with "failed to map segment from
+# shared object" and the hub crash-loops. /var/lib is exec, so extract under the StateDirectory there.
+Environment=DOTNET_BUNDLE_EXTRACT_BASE_DIR=/var/lib/michka/.bundle
+ExecStart=/opt/michka/michka_s --db /var/lib/michka/michka.db
+# A port change in the Settings page exits the process; systemd brings it back with the new port.
+Restart=always
+RestartSec=2
+# Light hardening (relaxed automatically by the kiosk drop-in when it switches User=root).
+NoNewPrivileges=true
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

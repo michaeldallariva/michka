@@ -1,0 +1,14 @@
+#!/bin/sh
+# michka-hub prerm: stop + disable the hub before the files go away.
+set -e
+
+case "$1" in
+  remove|deconfigure)
+    if [ -d /run/systemd/system ]; then
+      systemctl stop michka-hub.service >/dev/null 2>&1 || true
+      systemctl disable michka-hub.service >/dev/null 2>&1 || true
+    fi
+    ;;
+esac
+
+exit 0

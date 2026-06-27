@@ -1,0 +1,7 @@
+{
+  "name": "GPU",
+  "description": "Live GPU temperature, utilisation and memory for this host, read from the native WDDM sensor + GPU performance counters on Windows (the same sources as Task Manager). No vendor SDK or kernel driver.",
+  "author": "michka",
+  "version": "1.1",
+  "tag": "GPU"
+}

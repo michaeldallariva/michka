@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=1280, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>michka</title>
+  <link rel="stylesheet" href="css/app.css" />
+  <!-- Active UI template stylesheet (href set at runtime from the saved template; empty = default). -->
+  <link id="tplCss" rel="stylesheet" href="" />
+</head>
+<body>
+  <div id="app">
+    <div class="slider" id="slider">
+
+      <!-- ===================== Screen 0: services (slide right) ===================== -->
+      <section class="screen screen-services">
+        <header class="settings-top">
+          <span class="host-pill" id="svcPickerHostPill"><span class="host-pill-dot"></span><span id="svcPickerHost">--</span></span>
+          <h1 class="vpage-title" data-i18n="app.services">services</h1>
+          <button id="svcBack" class="back-btn fwd" data-i18n-aria="aria.backDashboard" aria-label="back to dashboard">
+            <span data-i18n="common.dashboard">Dashboard</span>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </header>
+
+        <div class="svc-content">
+          <div class="svc-toolbar">
+            <svg class="svc-ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input id="svcSearch" class="svc-search" type="search" data-i18n-ph="services.searchPlaceholder" placeholder="Search services / daemons…" autocomplete="off" inputmode="none" />
+            <span id="svcCount" class="svc-count">--</span>
+          </div>
+          <div id="svcList" class="svc-list"></div>
+          <div class="svc-pager">
+            <button id="svcPrev" class="btn ghost" aria-label="previous page" data-i18n="common.prev">Prev</button>
+            <span id="svcPage" class="svc-page">1 / 1</span>
+            <button id="svcNext" class="btn ghost" aria-label="next page" data-i18n="common.next">Next</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== Screen 1: dashboard ===================== -->
+      <section class="screen screen-dash">
+        <header class="topbar">
+          <div class="brand">
+            <svg class="logo" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M12 2 22 12 12 22 2 12z"/></svg>
+            <span class="name">michka</span>
+          </div>
+          <nav id="hostTabs" class="host-tabs"><!-- host tabs injected --></nav>
+          <div class="status">
+            <span id="connDot" class="conn-dot off" title="stream"></span>
+            <span id="clock" class="clock">--:--:--</span>
+          </div>
+        </header>
+
+        <!-- freeform board: boxes are injected + positioned by JS (drag to move, long-press for menu) -->
+        <main class="board" id="board"></main>
+
+        <!-- swipe affordances: left pull tab opens services, right pull tab opens settings -->
+        <button class="pull-tab left" id="pullTabL" data-i18n-aria="aria.openServices" aria-label="open services">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        <button class="pull-tab" id="pullTab" data-i18n-aria="aria.openSettings" aria-label="open settings">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <!-- top tab opens the Widgets page (swipe down), bottom tab opens the Service-status page (swipe up) -->
+        <button class="pull-tab top" id="pullTabT" data-i18n-aria="aria.openWidgets" aria-label="open widgets">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <button class="pull-tab bottom" id="pullTabB" data-i18n-aria="aria.openServiceStatus" aria-label="open service status">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+      </section>
+
+      <!-- ===================== Screen 2: settings ===================== -->
+      <section class="screen screen-settings">
+        <header class="settings-top">
+          <button id="backBtn" class="back-btn" data-i18n-aria="aria.backDashboard" aria-label="back to dashboard">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+            <span data-i18n="common.dashboard">Dashboard</span>
+          </button>
+          <h1><svg class="logo" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M12 2 22 12 12 22 2 12z"/></svg> michka <span class="sub" data-i18n="app.settings">settings</span></h1>
+          <span class="spacer"></span>
+        </header>
+
+        <div class="settings-content">
+          <div class="settings-cols">
+
+            <div class="settings-group">
+              <h3 data-i18n="settings.display">Display</h3>
+              <div class="setting">
+                <label data-i18n="settings.language">Language</label>
+                <select id="langSelect" class="lang-select"></select>
+              </div>
+              <div class="setting">
+                <label data-i18n="settings.tempUnit">Temperature unit</label>
+                <div class="seg" data-key="tempUnit"><button data-v="C">°C</button><button data-v="F">°F</button></div>
+              </div>
+              <div class="setting">
+                <label><span data-i18n="settings.dateFormat">Time &amp; date format</span><small data-i18n="settings.dateFormatHint">US (12-hour, MM/DD/YYYY) or rest of world (24-hour, DD/MM/YYYY)</small></label>
+                <div class="seg" data-key="dateFmt"><button data-v="us" data-i18n="settings.dateUS">US</button><button data-v="intl" data-i18n="settings.dateWorld">World</button></div>
+              </div>
+              <div class="setting">
+                <label><span data-i18n="settings.screenSize">Screen size</span><small data-i18n="settings.screenSizeHint">match your touchscreen panel so the UI scales to fit</small></label>
+                <div class="seg seg-wrap" data-key="screenSize">
+                  <button data-v="1280x400">1280&times;400</button>
+                  <button data-v="1424x280">1424&times;280</button>
+                  <button data-v="1920x440">1920&times;440</button>
+                  <button data-v="1920x515">1920&times;515</button>
+                </div>
+              </div>
+              <div class="setting">
+                <label data-i18n="settings.perCore">Per-core CPU bars</label>
+                <div class="seg" data-key="cores"><button data-v="on" data-i18n="common.on">On</button><button data-v="off" data-i18n="common.off">Off</button></div>
+              </div>
+              <div class="setting">
+                <label data-i18n="settings.autoCycle">Auto-cycle hosts</label>
+                <div class="seg" data-key="cycle"><button data-v="off" data-i18n="common.off">Off</button><button data-v="on" data-i18n="common.on">On</button></div>
+              </div>
+              <div class="setting">
+                <label data-i18n="settings.cycleInterval">Cycle interval</label>
+                <div class="seg" data-key="cycleSec"><button data-v="5" data-i18n="settings.cycle5s">5s</button><button data-v="10" data-i18n="settings.cycle10s">10s</button><button data-v="30" data-i18n="settings.cycle30s">30s</button></div>
+              </div>
+            </div>
+
+            <div class="settings-group">
+              <h3 data-i18n="settings.server">Server</h3>
+              <div class="setting">
+                <label><span data-i18n="settings.httpPort">HTTP port</span><small data-i18n="settings.httpPortHint">changing this restarts the UI</small></label>
+                <div class="field">
+                  <input id="portInput" class="num" type="number" min="1" max="65535" inputmode="none" />
+                  <button id="portApply" class="btn" data-i18n="common.apply">Apply</button>
+                </div>
+              </div>
+              <div class="setting">
+                <label><span data-i18n="settings.kioskBoot">Start kiosk on boot</span><small data-i18n="settings.kioskBootHint">auto-launch the dashboard at startup, or start it manually only</small></label>
+                <div class="seg" data-key="kioskAuto"><button data-v="on" data-i18n="settings.auto">Auto</button><button data-v="off" data-i18n="settings.manual">Manual</button></div>
+              </div>
+              <div class="setting">
+                <label><span data-i18n="settings.exitLogin">Exit to login</span><small data-i18n="settings.exitLoginHint">stop the dashboard, show the Linux console login</small></label>
+                <button id="exitUiBtn" class="btn danger" data-i18n="settings.exitUiBtn">Exit UI</button>
+              </div>
+              <div class="setting info">
+                <label data-i18n="settings.hub">Hub</label><span id="srvHub" class="val">--</span>
+              </div>
+              <div class="setting info">
+                <label data-i18n="settings.platform">Platform</label><span id="srvPlatform" class="val">--</span>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="settings-group ss-group">
+            <h3 data-i18n="settings.screensaver">Screensaver</h3>
+            <div class="setting">
+              <label><span data-i18n="settings.ssMode">Mode</span><small data-i18n="settings.ssModeHint">shown after inactivity — Eye of Sauron, Michka the bear, black, or panel sleep</small></label>
+              <div class="seg" data-key="ssMode">
+                <button data-v="off" data-i18n="ss.off">Off</button>
+                <button data-v="eye" data-i18n="ss.eye">Eye</button>
+                <button data-v="michka" data-i18n="ss.michka">Michka</button>
+                <button data-v="black" data-i18n="ss.black">Black</button>
+                <button data-v="sleep" data-i18n="ss.sleep">Sleep</button>
+              </div>
+            </div>
+            <div class="setting">
+              <label><span data-i18n="settings.ssActivate">Activate after</span><small data-i18n="settings.ssActivateHint">idle time before the screensaver kicks in</small></label>
+              <div class="ss-slider">
+                <input id="ssTimeout" type="range" min="0" max="3" step="1" value="1" aria-label="screensaver timeout" />
+                <div class="ss-ticks"><span data-i18n="ss.tick5">5m</span><span data-i18n="ss.tick20">20m</span><span data-i18n="ss.tick40">40m</span><span data-i18n="ss.tick60">60m</span></div>
+              </div>
+            </div>
+            <div class="setting">
+              <label><span data-i18n="settings.ssPreview">Preview</span><small data-i18n="settings.ssPreviewHint">show the screensaver now to test it</small></label>
+              <button id="ssPreview" class="btn" data-i18n="common.preview">Preview</button>
+            </div>
+          </div>
+
+          <div class="settings-group tpl-group">
+            <h3 data-i18n="settings.template">Template</h3>
+            <div class="setting">
+              <label><span data-i18n="settings.uiTemplate">UI template</span><small data-i18n-html="settings.uiTemplateHint">drop custom templates into the <code>templates/</code> folder next to the database</small></label>
+            </div>
+            <div id="tplGrid" class="tpl-grid">
+              <!-- The Default card is always present; custom templates are appended from /api/templates. -->
+              <div class="tpl-card active" data-tpl-id="">
+                <div class="tpl-card-preview"><img src="/img/template-default.png" alt="" /></div>
+                <div class="tpl-card-body">
+                  <div class="tpl-card-name" data-i18n="template.defaultName">Default</div>
+                  <div class="tpl-card-desc" data-i18n="template.defaultDesc">The built-in michka dashboard.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group about-group">
+            <h3 data-i18n="about.title">About</h3>
+            <div class="setting info">
+              <label data-i18n="about.authors">Authors</label>
+              <span class="val" data-i18n="about.authorsVal">Michael DALLA RIVA / Patrick DUQUESNOY</span>
+            </div>
+            <div class="setting info">
+              <label data-i18n="about.hubVersion">Hub version</label>
+              <span class="val" data-i18n="about.hubVersionVal">Beta 0.2</span>
+            </div>
+            <div class="setting info">
+              <label data-i18n="about.website">Website</label>
+              <span class="val" data-i18n="about.websiteVal">michka.org</span>
+            </div>
+            <div class="setting info about-tp">
+              <label data-i18n="about.thirdParty">Third party tools and licenses</label>
+              <div class="about-tp-list val" data-i18n-html="about.thirdPartyVal"></div>
+            </div>
+            <hr class="about-rule">
+          </div>
+
+          <div id="toast" class="toast hidden"></div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ===================== Vertical page: Service status (swipe up) ===================== -->
+    <!-- Slides up from the bottom over the dashboard; shows live status bubbles for the monitored
+         services of whichever host is selected in the top row. Per-host. -->
+    <section class="vpage vpage-svc" id="vpageSvc" aria-hidden="true">
+      <header class="settings-top">
+        <span class="host-pill" id="svcStatusHostPill"><span class="host-pill-dot"></span><span id="svcStatusHost">--</span></span>
+        <h1 class="vpage-title" data-i18n="app.services">services</h1>
+        <button id="svcStatusBack" class="back-btn fwd" data-i18n-aria="aria.backDashboard" aria-label="back to dashboard">
+          <span data-i18n="common.dashboard">Dashboard</span>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+      </header>
+      <div class="vpage-body">
+        <div id="svcStatusGrid" class="svc-status-grid"></div>
+      </div>
+    </section>
+
+    <!-- ===================== Vertical page: Widgets (swipe down) ===================== -->
+    <!-- Slides down from the top over the dashboard; a per-host board of small app-connector widgets
+         (e.g. a NexusM music player). Scaffolded now; real connectors land later. -->
+    <section class="vpage vpage-widgets" id="vpageWidgets" aria-hidden="true">
+      <header class="settings-top">
+        <span class="host-pill" id="widgetsHostPill"><span class="host-pill-dot"></span><span id="widgetsHost">--</span></span>
+        <h1 class="vpage-title" data-i18n="app.widgets">widgets</h1>
+        <button id="widgetsBack" class="back-btn fwd" data-i18n-aria="aria.backDashboard" aria-label="back to dashboard">
+          <span data-i18n="common.dashboard">Dashboard</span>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+      </header>
+      <div class="vpage-body">
+        <div id="widgetsGrid" class="widgets-grid"></div>
+      </div>
+    </section>
+
+    <!-- ===================== Box context menu / add chooser ===================== -->
+    <div id="popupScrim" class="popup-scrim hidden"></div>
+    <div id="boxMenu" class="popup hidden" role="menu">
+      <button data-act="add" role="menuitem">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span data-i18n="box.add">Add a box…</span>
+      </button>
+      <button data-act="remove" class="danger" role="menuitem">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+        <span data-i18n="box.remove">Remove this box</span>
+      </button>
+    </div>
+    <div id="boxAdd" class="popup chooser hidden" role="menu">
+      <div class="popup-head" data-i18n="box.addTitle">Add a box</div>
+      <div id="boxAddList" class="chooser-list"></div>
+    </div>
+    <div id="widgetChooser" class="popup chooser store hidden" role="menu">
+      <div class="store-head">
+        <span class="store-title" data-i18n="widget.addTitle">Add a widget</span>
+        <button class="store-close" type="button" data-i18n-aria="nxm.close" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="widgetChooserList" class="chooser-list"></div>
+    </div>
+    <div id="hostMenu" class="popup hidden" role="menu">
+      <div class="popup-head" id="hostMenuTitle">Host</div>
+      <button data-act="remove" class="danger" role="menuitem">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+        <span data-i18n="host.remove">Remove this host</span>
+      </button>
+      <button data-act="cancel" role="menuitem">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        <span data-i18n="common.cancel">Cancel</span>
+      </button>
+    </div>
+
+    <!-- ===================== On-screen keyboard (services search) ===================== -->
+    <div id="osk" class="osk hidden" aria-hidden="true"></div>
+
+    <!-- ===================== Screensaver overlay ===================== -->
+    <div id="screensaver" class="screensaver hidden" aria-hidden="true">
+      <canvas id="ssCanvas"></canvas>
+      <img id="ssBear" src="img/michka2.png" alt="" draggable="false" />
+    </div>
+  </div>
+
+  <script src="js/echarts.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

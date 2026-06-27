@@ -1,0 +1,18 @@
+#!/bin/sh
+# michka-agent postrm: reload units after removal. On purge, drop the config (and the michka user
+# if nothing else uses it).
+set -e
+
+if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload >/dev/null 2>&1 || true
+fi
+
+if [ "$1" = "purge" ]; then
+  rm -f /etc/default/michka-agent
+  # Only remove the shared user if the hub package isn't also installed.
+  if [ ! -x /opt/michka/michka_s ] && getent passwd michka >/dev/null 2>&1; then
+    deluser --quiet --system michka >/dev/null 2>&1 || userdel michka >/dev/null 2>&1 || true
+  fi
+fi
+
+exit 0

@@ -1,0 +1,18 @@
+Package: michka-hub
+Version: __VERSION__
+Section: net
+Priority: optional
+Architecture: amd64
+Maintainer: Michka <michka@localhost>
+Depends: libc6, libgcc-s1, libstdc++6, zlib1g, adduser
+Recommends: libssl3 | libssl3t64, ca-certificates
+Description: Michka hardware monitor hub (self-contained web dashboard)
+ Michka is a cross-platform hardware dashboard. This package installs the hub: one
+ self-contained .NET binary that hosts a web server and serves a touch-friendly dark
+ dashboard (CPU / memory / network / disk / temperatures / services), collects local
+ metrics, accepts pushes from Michka agents, stores history in SQLite, and streams live
+ updates to browsers over SSE.
+ .
+ The hub runs headless as an unprivileged system user and is reached from any browser on
+ the network. Install the michka-kiosk package as well to turn the machine into a
+ self-contained touchscreen appliance (cage + Chromium on tty1).

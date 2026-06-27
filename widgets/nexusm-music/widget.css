@@ -1,0 +1,228 @@
+/* NexusM Music — launcher card + full-screen player styles.
+   The launcher (.nxm-launch) renders inside the widget card on the host page. The player
+   (.nxm-overlay) is appended to <body> as a full-screen takeover. Everything uses the shared theme
+   tokens (var(--text), var(--green) …) so active templates re-skin it, and key sizes scale with
+   var(--ui-scale) so the four target panels stay readable. Sizes are deliberately generous: the
+   player uses half the screen, so text, inputs and the PIN/URL keys are kept comfortably large. */
+
+/* ---- launcher card (on the host page) ---- */
+.widget-nexusm-music .nxm-launch {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; height: 100%; width: 100%; text-align: center; color: var(--text);
+}
+.widget-nexusm-music .nxm-launch-icon { color: var(--green); }
+.widget-nexusm-music .nxm-launch-sub {
+  font-size: 13px; color: var(--muted); max-width: 90%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.widget-nexusm-music .nxm-launch-btn { margin-top: 4px; }
+
+/* ---- shared button ---- */
+.nxm-btn {
+  border: 1px solid var(--green); background: var(--green); color: #04140a;
+  font-weight: 700; font-size: calc(17px * var(--ui-scale, 1)); border-radius: 12px;
+  padding: calc(12px * var(--ui-scale, 1)) calc(22px * var(--ui-scale, 1)); cursor: pointer;
+}
+.nxm-btn:active { filter: brightness(1.1); }
+.nxm-btn.ghost { background: transparent; color: var(--text); border-color: var(--card-brd); }
+.nxm-btn:disabled { opacity: 0.6; }
+
+/* ---- full-screen overlay ---- */
+.nxm-overlay {
+  position: fixed; inset: 0; z-index: 52; background: var(--bg);
+  display: flex; color: var(--text); overflow: hidden;
+  font-size: calc(16px * var(--ui-scale, 1));
+}
+/* Semi-transparent close button, top-right of the player. */
+.nxm-close {
+  position: absolute; top: calc(12px * var(--ui-scale, 1)); right: calc(12px * var(--ui-scale, 1));
+  z-index: 3; width: calc(46px * var(--ui-scale, 1)); height: calc(46px * var(--ui-scale, 1));
+  border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(20, 26, 38, 0.45); color: var(--text);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+}
+.nxm-close:active { background: rgba(20, 26, 38, 0.75); }
+.nxm-body { flex: 1 1 auto; display: flex; min-width: 0; overflow: hidden; }
+
+/* ---- connect / login panels ---- */
+/* margin:auto centres it; max-height + overflow are a safety net so nothing is ever off-screen. */
+.nxm-panel {
+  margin: auto; width: min(560px, 86%); max-height: 100%; box-sizing: border-box;
+  display: flex; flex-direction: column; gap: calc(10px * var(--ui-scale, 1));
+  padding: calc(16px * var(--ui-scale, 1)); overflow: auto;
+}
+/* The connect panel goes two-column (info+buttons | keypad) so it fits the short 1280x400/1424x280
+   panels with every control visible — no off-screen Connect/Discover buttons. */
+.nxm-panel.connect { width: min(940px, 94%); }
+.nxm-connect { display: flex; flex-direction: row; gap: calc(20px * var(--ui-scale, 1)); align-items: flex-start; }
+.nxm-connect-left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: calc(10px * var(--ui-scale, 1)); }
+.nxm-panel-title { font-size: calc(22px * var(--ui-scale, 1)); font-weight: 700; margin: 0; }
+.nxm-panel-hint { font-size: calc(14px * var(--ui-scale, 1)); color: var(--muted); margin: 0; }
+.nxm-field-label { font-size: calc(14px * var(--ui-scale, 1)); color: var(--muted); margin-top: 4px; }
+.nxm-input {
+  width: 100%; box-sizing: border-box; background: var(--bg2);
+  border: 1px solid var(--card-brd); border-radius: 12px; color: var(--text);
+  font-size: calc(20px * var(--ui-scale, 1)); padding: calc(12px * var(--ui-scale, 1)) calc(14px * var(--ui-scale, 1));
+  outline: none;
+}
+.nxm-input:focus { border-color: var(--green); }
+.nxm-err { min-height: 20px; color: var(--red); font-size: calc(14px * var(--ui-scale, 1)); }
+/* Both actions share the width so the green Connect button is never half-hidden. */
+.nxm-panel-actions { display: flex; gap: calc(10px * var(--ui-scale, 1)); }
+.nxm-panel-actions .nxm-btn { flex: 1 1 0; padding-left: 0; padding-right: 0; }
+.nxm-loading, .nxm-list-msg, .nxm-stage-empty { color: var(--muted); font-size: calc(16px * var(--ui-scale, 1)); }
+.nxm-loading { margin: auto; }
+
+/* URL keypad (digits + . : / — the kiosk text keyboard lacks symbols). Fixed width on the right of
+   the connect row; compact rows so all three fit the short panel. */
+.nxm-pad {
+  flex: 0 0 auto; width: calc(250px * var(--ui-scale, 1));
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: calc(7px * var(--ui-scale, 1));
+}
+.nxm-pad-key {
+  border: 1px solid var(--card-brd); background: var(--bg2); color: var(--text);
+  border-radius: 10px; font-size: calc(20px * var(--ui-scale, 1));
+  padding: calc(9px * var(--ui-scale, 1)) 0; cursor: pointer;
+}
+.nxm-pad-key:active { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+/* URL field: fixed "http://" prefix + editable host:port + clear. The prefix can't be edited/deleted. */
+.nxm-url-row {
+  display: flex; align-items: stretch; border: 1px solid var(--card-brd);
+  border-radius: 12px; background: var(--bg2); overflow: hidden;
+}
+.nxm-url-row:focus-within { border-color: var(--green); }
+.nxm-url-prefix {
+  display: flex; align-items: center; flex: 0 0 auto; color: var(--muted);
+  font-size: calc(18px * var(--ui-scale, 1));
+  padding: 0 calc(4px * var(--ui-scale, 1)) 0 calc(14px * var(--ui-scale, 1));
+  border-right: 1px solid var(--card-brd); user-select: none; pointer-events: none;
+}
+.nxm-url-input.nxm-input {
+  flex: 1 1 auto; min-width: 0; border: 0; border-radius: 0; background: transparent;
+}
+.nxm-url-clear {
+  flex: 0 0 auto; border: 0; background: transparent; color: var(--muted); cursor: pointer;
+  font-size: calc(18px * var(--ui-scale, 1)); padding: 0 calc(14px * var(--ui-scale, 1));
+}
+.nxm-url-clear:active { color: var(--text); }
+
+/* PIN field: shown as plain digits (visible while typing), wide letter-spacing. */
+.nxm-pin { letter-spacing: calc(6px * var(--ui-scale, 1)); }
+/* Inline PIN keypad: 3 columns, narrower than the URL pad. */
+.nxm-pad-num { grid-template-columns: repeat(3, 1fr); width: calc(190px * var(--ui-scale, 1)); }
+
+/* discovered-servers list (tap a row to choose it) */
+.nxm-results { display: flex; flex-direction: column; gap: calc(6px * var(--ui-scale, 1)); }
+.nxm-results-label { font-size: calc(12px * var(--ui-scale, 1)); color: var(--muted); }
+.nxm-result {
+  text-align: left; border: 1px solid var(--card-brd); background: var(--bg2); color: var(--text);
+  border-radius: 10px; padding: calc(9px * var(--ui-scale, 1)) calc(12px * var(--ui-scale, 1));
+  font-size: calc(15px * var(--ui-scale, 1)); cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.nxm-result.on { border-color: var(--green); color: var(--green); }
+.nxm-result:active { background: rgba(255, 255, 255, 0.06); }
+
+/* ---- player: left stage / right side ---- */
+.nxm-player { display: flex; width: 100%; min-width: 0; }
+.nxm-stage {
+  flex: 0 0 50%; max-width: 50%; background: #000;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.nxm-stage-empty { color: var(--muted); }
+.nxm-video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+.nxm-art { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.nxm-cover { max-width: 100%; max-height: 100%; object-fit: contain; }
+.nxm-art.noart { color: var(--muted); }
+
+.nxm-side {
+  flex: 1 1 50%; min-width: 0; display: flex; flex-direction: column;
+  padding: calc(18px * var(--ui-scale, 1)) calc(20px * var(--ui-scale, 1));
+  gap: calc(10px * var(--ui-scale, 1)); box-sizing: border-box;
+}
+
+/* now-playing metadata */
+.nxm-now { min-width: 0; }
+/* The title shares its line with the gear + close buttons (top-right of the overlay), so reserve room
+   for them — ~120px covers both 46px round buttons + gaps — and let it truncate with an ellipsis well
+   before it can slide under the icons. */
+.nxm-now-title {
+  font-size: calc(24px * var(--ui-scale, 1)); font-weight: 700; line-height: 1.15;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding-right: calc(120px * var(--ui-scale, 1));
+}
+/* Settings gear on the overlay, sitting just left of the round close button (same vertical line). */
+.nxm-gear {
+  position: absolute; top: calc(12px * var(--ui-scale, 1));
+  right: calc(66px * var(--ui-scale, 1)); z-index: 3;
+  width: calc(46px * var(--ui-scale, 1)); height: calc(46px * var(--ui-scale, 1));
+  border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(20, 26, 38, 0.45); color: var(--text);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+}
+.nxm-gear:active { background: rgba(20, 26, 38, 0.75); }
+.nxm-now-artist {
+  font-size: calc(18px * var(--ui-scale, 1)); color: var(--green); margin-top: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.nxm-now-album {
+  font-size: calc(14px * var(--ui-scale, 1)); color: var(--muted); margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* transport */
+.nxm-transport { display: flex; align-items: center; justify-content: center; gap: calc(18px * var(--ui-scale, 1)); }
+.nxm-tbtn {
+  border: 0; background: transparent; color: var(--text); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; padding: 6px;
+}
+.nxm-tbtn.big {
+  width: calc(60px * var(--ui-scale, 1)); height: calc(60px * var(--ui-scale, 1));
+  border-radius: 50%; background: var(--green); color: #04140a;
+}
+.nxm-tbtn:active { filter: brightness(1.15); }
+
+/* seek */
+.nxm-seek { display: flex; align-items: center; gap: 10px; }
+.nxm-time { font-size: calc(13px * var(--ui-scale, 1)); color: var(--muted); min-width: 42px; text-align: center; }
+/* Flat plain-blue progress/seek bar (no gradient — house style). */
+.nxm-range { flex: 1 1 auto; height: calc(28px * var(--ui-scale, 1)); accent-color: var(--blue); }
+
+/* browser */
+.nxm-browse { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: calc(8px * var(--ui-scale, 1)); }
+.nxm-tabs { display: flex; gap: 8px; }
+.nxm-tab {
+  flex: 1 1 0; border: 1px solid var(--card-brd); background: var(--bg2); color: var(--muted);
+  border-radius: 10px; font-size: calc(15px * var(--ui-scale, 1)); font-weight: 600;
+  padding: calc(9px * var(--ui-scale, 1)) 0; cursor: pointer;
+}
+.nxm-tab.on { background: var(--green); border-color: var(--green); color: #04140a; }
+
+.nxm-searchrow { position: relative; display: flex; align-items: center; }
+.nxm-search-icon { position: absolute; left: 12px; color: var(--muted); pointer-events: none; display: inline-flex; }
+.nxm-search { padding-left: calc(40px * var(--ui-scale, 1)); }
+
+.nxm-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.nxm-row {
+  width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 10px;
+  border: 0; border-bottom: 1px solid var(--card-brd); background: transparent; color: var(--text);
+  text-align: left; cursor: pointer; padding: calc(11px * var(--ui-scale, 1)) calc(6px * var(--ui-scale, 1));
+}
+.nxm-row:active { background: var(--card); }
+.nxm-row.playing { background: var(--card); }
+.nxm-row.playing .nxm-row-title { color: var(--green); }
+.nxm-row-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.nxm-row-title { font-size: calc(16px * var(--ui-scale, 1)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nxm-row-artist { font-size: calc(13px * var(--ui-scale, 1)); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nxm-row-dur { font-size: calc(13px * var(--ui-scale, 1)); color: var(--muted); flex: 0 0 auto; }
+
+.nxm-pager { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.nxm-pbtn {
+  border: 1px solid var(--card-brd); background: var(--bg2); color: var(--text);
+  border-radius: 10px; font-size: calc(14px * var(--ui-scale, 1)); padding: calc(8px * var(--ui-scale, 1)) calc(16px * var(--ui-scale, 1)); cursor: pointer;
+}
+.nxm-pbtn:active { background: var(--card); }
+.nxm-pinfo { font-size: calc(13px * var(--ui-scale, 1)); color: var(--muted); }
