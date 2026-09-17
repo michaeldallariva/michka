@@ -1,0 +1,34 @@
+// Michka: let the unprivileged hub drive the small, fixed set of units it needs, so it never has to
+// run as root. Installed as /etc/polkit-1/rules.d/49-michka.rules by the michka-kiosk add-on.
+//
+// The hub runs as a dedicated locked system user (default "michka", but the admin may pick a different
+// or existing name at install time). To avoid hardcoding that username here, the grant is keyed on
+// membership of the "michka" GROUP — the installer always creates that group and adds the chosen
+// run-user to it. So this rule never needs regenerating per host/username.
+//
+// Granted to members of the "michka" group ONLY: start/stop/restart (manage-units) of a fixed unit set
+//   - michka-kiosk (config restart), getty@tty1 (exit-to-login),
+//   - michka-screen-on / michka-screen-off (screensaver panel power),
+//   - michka-kiosk-autostart-on / -off (the "start kiosk on boot" toggle — these root helpers do the
+//     actual `systemctl enable/disable`, so the hub never needs the broader manage-unit-files right).
+// Everything else (incl. manage-unit-files and any other unit) is left to polkit's defaults (denied).
+//
+// Requires polkit with the JS rules backend (polkit >= 0.106; Debian 13 ships it).
+
+polkit.addRule(function (action, subject) {
+    if (!subject.isInGroup("michka")) return polkit.Result.NOT_HANDLED;
+
+    if (action.id === "org.freedesktop.systemd1.manage-units") {
+        var unit = action.lookup("unit");
+        if (unit === "michka-kiosk.service" ||
+            unit === "getty@tty1.service" ||
+            unit === "michka-screen-on.service" ||
+            unit === "michka-screen-off.service" ||
+            unit === "michka-kiosk-autostart-on.service" ||
+            unit === "michka-kiosk-autostart-off.service") {
+            return polkit.Result.YES;
+        }
+    }
+
+    return polkit.Result.NOT_HANDLED;
+});

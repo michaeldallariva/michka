@@ -5,17 +5,19 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=michka
-Group=michka
+# Runs unprivileged with no account to create: systemd allocates a transient user for this service
+# (named after the unit) at start, never written to /etc/passwd.
+DynamicUser=yes
 # Settings live in /etc/default/michka-agent (MICHKA_ARGS). At minimum it must set --hub.
 EnvironmentFile=-/etc/default/michka-agent
-# The self-contained binary unpacks bundled native libs to a cache dir at startup. It MUST sit on an
-# exec-mounted filesystem: /run is a tmpfs frequently mounted noexec, which makes dlopen() of the
-# unpacked native libs (e_sqlite3) fail with "failed to map segment from shared object" and the agent
-# crash-loops. StateDirectory gives a writable /var/lib/michka-agent that is whitelisted even under
-# ProtectSystem=strict and lives on an exec filesystem, so extract there.
+# The self-contained binary unpacks bundled native libs to a cache dir at startup. It MUST be writable
+# AND exec, or dlopen() of the unpacked native libs (e_sqlite3) fails with "failed to map segment from
+# shared object" and the agent crash-loops. Under DynamicUser the StateDirectory is mounted noexec
+# (idmapped), so extraction goes to a plain /var/lib path exposed via ReadWritePaths (stays exec in the
+# sandbox); the dir is created 1777 by tmpfiles.d/michka.conf.
 StateDirectory=michka-agent
-Environment=DOTNET_BUNDLE_EXTRACT_BASE_DIR=/var/lib/michka-agent/.bundle
+ReadWritePaths=/var/lib/michka-agent-bundle
+Environment=DOTNET_BUNDLE_EXTRACT_BASE_DIR=/var/lib/michka-agent-bundle
 ExecStart=/opt/michka/michka_c --agent $MICHKA_ARGS
 Restart=always
 RestartSec=5

@@ -1,0 +1,12 @@
+[Unit]
+Description=Michka kiosk: power the panel OFF (screensaver sleep)
+# A root helper the (possibly unprivileged) hub triggers via `systemctl start` to drive wlr-randr in
+# the kiosk's root-owned Wayland session at /run/user/0, which the hub itself can't reach when it runs
+# as a non-root user. Authorised for the hub's service user (member of group michka) by the michka
+# polkit rule. No-op (logged)
+# if wlr-randr / the compositor doesn't support output power management.
+
+[Service]
+Type=oneshot
+Environment=XDG_RUNTIME_DIR=/run/user/0
+ExecStart=/bin/sh -c 'sock=$(ls /run/user/0/ 2>/dev/null | grep -E "^wayland-[0-9]+$" | head -1); export WAYLAND_DISPLAY=$sock; wlr-randr 2>/dev/null | grep -E "^[^[:space:]]" | cut -d " " -f1 | while read o; do wlr-randr --output "$o" --off; done'

@@ -9,6 +9,7 @@ fi
 
 if [ "$1" = "purge" ]; then
   rm -f /etc/default/michka-agent
+  rm -rf /var/lib/michka-agent-bundle
   # Only remove the shared user if the hub package isn't also installed.
   if [ ! -x /opt/michka/michka_s ] && getent passwd michka >/dev/null 2>&1; then
     deluser --quiet --system michka >/dev/null 2>&1 || userdel michka >/dev/null 2>&1 || true

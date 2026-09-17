@@ -1,0 +1,11 @@
+#!/bin/sh
+# michka-hub debconf config: ask which system user the hub should run as (default "michka").
+# Shown at medium priority so interactive installs are prompted, while unattended/preseeded installs
+# silently take the default. The answer is consumed by postinst.
+set -e
+. /usr/share/debconf/confmodule
+
+db_input medium michka-hub/run-user || true
+db_go || true
+
+exit 0

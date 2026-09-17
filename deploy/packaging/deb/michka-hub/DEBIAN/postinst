@@ -1,18 +1,56 @@
 #!/bin/sh
-# michka-hub postinst: create the service user + data dir, then enable and (re)start the hub.
+# michka-hub postinst: create the (locked, no-login) system user the hub runs as — chosen via debconf,
+# default "michka" — add it to the "michka" group used to authorise the hub's kiosk/display actions,
+# prepare the data dir + seed templates/widgets, then enable and (re)start the hub. The hub runs
+# UNPRIVILEGED as that static user (not a systemd DynamicUser; the reference dbus-daemon refuses
+# DynamicUser bus connections, which would break the hub's systemctl-based display actions).
 set -e
+
+. /usr/share/debconf/confmodule
 
 case "$1" in
   configure)
-    # Unprivileged system user the hub runs as (no login, no home creation).
-    if ! getent passwd michka >/dev/null 2>&1; then
-      adduser --system --group --no-create-home --home /var/lib/michka \
-              --shell /usr/sbin/nologin --quiet michka || \
-      useradd --system --home-dir /var/lib/michka --shell /usr/sbin/nologin michka || true
+    # --- resolve the chosen run-user (debconf; default michka) -----------------
+    RUN_USER=michka
+    if db_get michka-hub/run-user 2>/dev/null; then
+      [ -n "$RET" ] && RUN_USER=$(printf '%s' "$RET" | tr -d '[:space:]')
+    fi
+    [ -n "$RUN_USER" ] || RUN_USER=michka
+
+    # --- the "michka" group is the polkit grant key; always present ------------
+    if ! getent group michka >/dev/null 2>&1; then
+      addgroup --system michka >/dev/null 2>&1 || groupadd -r michka >/dev/null 2>&1 || true
+    fi
+
+    # --- create or reuse the run-user; record only the ones WE create ----------
+    if [ "$RUN_USER" = "root" ]; then
+      :
+    elif getent passwd "$RUN_USER" >/dev/null 2>&1; then
+      # Existing account: add to the michka group, leave everything else untouched.
+      adduser --quiet "$RUN_USER" michka >/dev/null 2>&1 || usermod -aG michka "$RUN_USER" >/dev/null 2>&1 || true
+    else
+      adduser --system --group --home /var/lib/michka --no-create-home \
+        --shell /usr/sbin/nologin "$RUN_USER" >/dev/null 2>&1 || \
+      useradd -r -M -d /var/lib/michka -s /usr/sbin/nologin "$RUN_USER" >/dev/null 2>&1 || true
+      adduser --quiet "$RUN_USER" michka >/dev/null 2>&1 || usermod -aG michka "$RUN_USER" >/dev/null 2>&1 || true
+      mkdir -p /etc/michka && echo "$RUN_USER" > /etc/michka/created-user
+    fi
+
+    # --- apply a non-default run-user via a drop-in (base unit defaults to michka)
+    DROPIN=/etc/systemd/system/michka-hub.service.d/10-run-user.conf
+    if [ "$RUN_USER" != "michka" ]; then
+      mkdir -p /etc/systemd/system/michka-hub.service.d
+      if [ "$RUN_USER" = "root" ]; then
+        printf '[Service]\nUser=root\nGroup=root\n' > "$DROPIN"
+      else
+        PG=$(id -gn "$RUN_USER" 2>/dev/null || echo "$RUN_USER")
+        printf '[Service]\nUser=%s\nGroup=%s\nSupplementaryGroups=michka\n' "$RUN_USER" "$PG" > "$DROPIN"
+      fi
+    else
+      rm -f "$DROPIN" 2>/dev/null || true
     fi
 
     mkdir -p /var/lib/michka
-    chown michka:michka /var/lib/michka
     chmod 0755 /opt/michka/michka_s 2>/dev/null || true
 
     # Seed the on-disk templates + widgets shipped under /opt into the data dir the hub reads from
@@ -28,8 +66,12 @@ case "$1" in
         name=$(basename "$d")
         [ -e "$dst/$name" ] || cp -r "$d" "$dst/$name"
       done
-      chown -R michka:michka "$dst" 2>/dev/null || true
     done
+
+    # Own the data dir as the run-user so the unprivileged hub can read/write it (and self-extract its
+    # bundled native libs into /var/lib/michka/.bundle). systemd also re-applies this on each start.
+    OWN_GROUP=$(id -gn "$RUN_USER" 2>/dev/null || echo "$RUN_USER")
+    chown -R "$RUN_USER":"$OWN_GROUP" /var/lib/michka 2>/dev/null || true
 
     if [ -d /run/systemd/system ]; then
       systemctl daemon-reload >/dev/null 2>&1 || true
@@ -45,7 +87,8 @@ case "$1" in
     echo "  Michka hub${ver:+ $ver} installed."
     echo "    Binary    : /opt/michka/michka_s"
     echo "    Data dir  : /var/lib/michka  (michka.db, michka.conf — created on first run)"
-    echo "    Service   : michka-hub.service  (runs as user 'michka', enabled at boot)"
+    echo "    Runs as   : ${RUN_USER}  (unprivileged, locked no-login system user; in group 'michka')"
+    echo "    Service   : michka-hub.service  (enabled at boot)"
     echo "    Dashboard : http://${ip}:5000  (default port; change it in michka.conf or the Settings page)"
     echo "    Status    : sudo systemctl status michka-hub"
     echo "    Logs      : sudo journalctl -u michka-hub -b"

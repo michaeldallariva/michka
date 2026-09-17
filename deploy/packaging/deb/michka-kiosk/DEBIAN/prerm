@@ -1,5 +1,5 @@
 #!/bin/sh
-# michka-kiosk prerm: stop + disable the kiosk before its files (incl. the hub root drop-in) go away.
+# michka-kiosk prerm: stop + disable the kiosk before its files (units + polkit rule) go away.
 set -e
 
 case "$1" in

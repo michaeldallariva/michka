@@ -1,0 +1,11 @@
+Template: michka-hub/run-user
+Type: string
+Default: michka
+Description: System user to run the Michka hub as:
+ The Michka hub runs unprivileged (never as root). The installer creates a locked,
+ no-login system user with this name to own the hub's data and run the service, and
+ adds it to a "michka" group used to authorise the hub's kiosk/display actions.
+ .
+ Accept the default "michka", enter a different name to use instead, name an EXISTING
+ user to reuse it (it is added to the "michka" group but otherwise left unchanged and
+ never removed on uninstall), or enter "root" to run the hub as root (not recommended).

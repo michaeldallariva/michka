@@ -1,15 +1,35 @@
 #!/bin/sh
-# michka-hub postrm: reload units after removal; on purge drop the data dir + service user.
+# michka-hub postrm: reload units after removal; on purge drop the data dir, the run-user drop-in, and
+# ONLY the system user/group that this package created (recorded in /etc/michka/created-user). An
+# existing account the admin pointed the hub at is never touched.
 set -e
 
 if [ -d /run/systemd/system ]; then
+  rm -f /etc/systemd/system/michka-hub.service.d/10-run-user.conf 2>/dev/null || true
+  rmdir /etc/systemd/system/michka-hub.service.d 2>/dev/null || true
   systemctl daemon-reload >/dev/null 2>&1 || true
 fi
 
 if [ "$1" = "purge" ]; then
+  # Remove the user we created (if any), before deleting the data dir it owned.
+  if [ -f /etc/michka/created-user ]; then
+    cu=$(cat /etc/michka/created-user 2>/dev/null | tr -d '[:space:]')
+    if [ -n "$cu" ] && getent passwd "$cu" >/dev/null 2>&1; then
+      deluser --quiet --system "$cu" >/dev/null 2>&1 || userdel "$cu" >/dev/null 2>&1 || true
+    fi
+  fi
+  # Drop the "michka" group if it is now empty / unused.
+  if getent group michka >/dev/null 2>&1; then
+    delgroup --quiet --only-if-empty michka >/dev/null 2>&1 || groupdel michka >/dev/null 2>&1 || true
+  fi
   rm -rf /var/lib/michka
-  if getent passwd michka >/dev/null 2>&1; then
-    deluser --quiet --system michka >/dev/null 2>&1 || userdel michka >/dev/null 2>&1 || true
+  rm -f /etc/michka/created-user 2>/dev/null || true
+  rmdir /etc/michka 2>/dev/null || true
+
+  # Clean up debconf state for this package.
+  if [ -e /usr/share/debconf/confmodule ]; then
+    . /usr/share/debconf/confmodule
+    db_purge 2>/dev/null || true
   fi
 fi
 

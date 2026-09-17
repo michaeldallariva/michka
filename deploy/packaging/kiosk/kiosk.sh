@@ -10,6 +10,25 @@ if [ -f "$CONF" ]; then
   [ -n "$p" ] && port=$p
 fi
 
+# Clear Chromium's HTTP cache when the hub binary changed, so a freshly-deployed embedded UI can't be
+# served stale from this persistent profile. We run as root (we own the profile), keyed on the hub
+# binary's fingerprint in a stamp file. A root hub does this itself in-process; an unprivileged
+# (DynamicUser) hub can't touch this root-owned profile, so the kiosk owns the wipe. Cookies + Local
+# Storage are left alone (widget selections / NexusM config persist).
+HUB_BIN=/opt/michka/michka_s
+[ -x "$HUB_BIN" ] || HUB_BIN=/root/michka/michka_s   # rack hand-rolled layout
+STAMP="$PROFILE/.kiosk-cache-stamp"
+if [ -x "$HUB_BIN" ]; then
+  cur=$(sha256sum "$HUB_BIN" 2>/dev/null | cut -d' ' -f1)
+  [ -n "$cur" ] || cur=$(stat -c '%Y-%s' "$HUB_BIN" 2>/dev/null)
+  prev=""
+  [ -f "$STAMP" ] && prev=$(cat "$STAMP" 2>/dev/null)
+  if [ -n "$cur" ] && [ "$cur" != "$prev" ]; then
+    rm -rf "$PROFILE/Default/Cache" "$PROFILE/Default/Code Cache" "$PROFILE/Default/GPUCache" 2>/dev/null || true
+    mkdir -p "$PROFILE" && printf '%s' "$cur" > "$STAMP" 2>/dev/null || true
+  fi
+fi
+
 # Audio: start a per-session PipeWire/PulseAudio server so Chromium has sound. WirePlumber
 # auto-routes to the machine's default output, so this works on any hardware (no device hardcoding).
 # Idempotent — skipped if pipewire is already running for this session.

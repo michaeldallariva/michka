@@ -1,0 +1,8 @@
+[Unit]
+Description=Michka: disable kiosk autostart at boot
+# Companion to michka-kiosk-autostart-on.service — see that unit's header. Triggered by the hub via
+# `systemctl start` to flip kiosk boot-autostart OFF (the unit stays installed, just not wanted at boot).
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl disable michka-kiosk.service

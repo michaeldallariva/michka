@@ -19,9 +19,16 @@ Everything installs to predictable locations:
 /etc/systemd/system/        michka-hub.service (+ michka-kiosk.service for the appliance)
 ```
 
-The hub runs **headless as the unprivileged `michka` user** and is reached from any browser on
-your network. Adding the kiosk package turns the machine into a self-contained touchscreen
-appliance and (only then) elevates the hub to root so it can drive the local display.
+The hub runs **unprivileged** (never as root) and is reached from any browser on your network. It runs
+as a dedicated, locked, no-login system user — by default `michka`, but the installer **asks** and you
+can accept the default, give a different name, point it at an existing account, or choose `root`. (The
+hub needs a *static* user rather than a systemd `DynamicUser` because Debian's default `dbus-daemon`
+refuses bus connections from dynamic users, which the hub's kiosk/display actions rely on.) Adding the
+kiosk package turns the machine into a self-contained touchscreen appliance **without elevating the
+hub**: it installs a polkit rule (keyed on the `michka` group the run-user is added to) plus small
+helper units so the still-unprivileged hub can drive the local display (screen power, kiosk restart,
+exit-to-login). On uninstall (`--purge`) only a user the installer *created* is removed; an existing
+account you reused is left alone.
 
 ---
 
@@ -33,8 +40,9 @@ appliance and (only then) elevates the hub to root so it can drive the local dis
 sudo apt install ./michka-hub_1.0.0_amd64.deb
 ```
 
-`apt` resolves the (tiny) library dependencies, creates the `michka` user, and enables + starts
-`michka-hub`. When it finishes the hub is already live:
+`apt` resolves the (tiny) library dependencies, asks which system user to run as (default `michka`,
+created locked + no-login), and enables + starts `michka-hub`. When it finishes the hub is already
+live:
 
 ```bash
 systemctl status michka-hub
@@ -54,9 +62,10 @@ full-screen dashboard on tty1 at boot:
 sudo apt install ./michka-hub_1.0.0_amd64.deb ./michka-kiosk_1.0.0_amd64.deb
 ```
 
-Installing `michka-kiosk` switches the hub to run as root (so the screensaver screen-power, the
-"exit to login", kiosk-restart-on-port-change and kiosk-autostart controls work). Removing it
-reverts the hub to the unprivileged user.
+Installing `michka-kiosk` keeps the hub **unprivileged** and instead adds a polkit rule plus the
+`michka-screen-on/off` helper units, so the hub can drive the panel (screensaver screen-power,
+"exit to login", kiosk-restart-on-port-change and kiosk-autostart) through `systemctl` without
+running as root. Removing the package removes the rule + helpers.
 
 ### Agent (client) on other machines
 
@@ -92,13 +101,13 @@ sudo ./install.sh --agent --hub http://<hub-ip>:5000 --name my-box
 
 On Debian/Ubuntu `--kiosk` installs the display packages via `apt`. On other distros it prints
 the package list for you to install with your own package manager
-(`cage chromium libegl1 libgles2 libgl1-mesa-dri grim wlr-randr curl fonts-noto-cjk`).
+(`cage chromium libegl1 libgles2 libgl1-mesa-dri grim wlr-randr curl fonts-noto-cjk polkitd`).
 
 Uninstall:
 
 ```bash
 sudo ./uninstall.sh            # keep your data in /var/lib/michka
-sudo ./uninstall.sh --purge    # also delete data + the michka user
+sudo ./uninstall.sh --purge    # also delete data (there is no service account to remove)
 ```
 
 ---
@@ -174,8 +183,12 @@ version.
 - **Dependencies:** the hub is self-contained, so it only needs base C/C++ runtime libraries
   (`libc6`, `libgcc-s1`, `libstdc++6`, `zlib1g`) present on every Debian system. No `dotnet`, no ICU
   (the build uses invariant globalization).
-- **Security:** headless installs run unprivileged. The hub is **HTTP on your LAN** — don't expose
-  it directly to the internet; put it behind a reverse proxy / VPN if you need remote access.
+- **Security:** the hub always runs **unprivileged** (a dedicated locked system user, default `michka`,
+  chosen at install) — even the kiosk appliance keeps it unprivileged, driving the display via a scoped
+  polkit rule (granted to the `michka` group) + helper units. Agents authenticate to the hub with a shared **token** (the hub auto-generates one in
+  `michka.conf`; copy it into each agent's `--token` / `michka_c.conf`). The hub is **HTTP on your LAN**
+  — don't expose it directly to the internet; put it behind a reverse proxy / VPN if you need remote
+  access.
 - **Kiosk won't start:** `journalctl -u michka-kiosk`. It needs a free tty1 and a working GL/EGL
   stack; back-to-back restarts can wedge Chromium's GL context — a single `systemctl restart
   michka-kiosk` usually fixes it. Chinese text needs `fonts-noto-cjk`.

@@ -1,21 +1,11 @@
 #!/bin/sh
-# michka-kiosk postrm: the root drop-in is gone with the package, so revert the hub to the
-# unprivileged user, fix data ownership, and restart it.
+# michka-kiosk postrm: the helper units + polkit rule go away with the package; just reload systemd
+# + polkit. The hub was never elevated (it runs unprivileged as the static "michka" user), so nothing to revert.
 set -e
 
 if [ -d /run/systemd/system ]; then
   systemctl daemon-reload >/dev/null 2>&1 || true
+  systemctl reload polkit.service >/dev/null 2>&1 || true
 fi
-
-case "$1" in
-  remove|purge)
-    if getent passwd michka >/dev/null 2>&1 && [ -d /var/lib/michka ]; then
-      chown -R michka:michka /var/lib/michka >/dev/null 2>&1 || true
-    fi
-    if [ -d /run/systemd/system ]; then
-      systemctl restart michka-hub.service >/dev/null 2>&1 || true
-    fi
-    ;;
-esac
 
 exit 0

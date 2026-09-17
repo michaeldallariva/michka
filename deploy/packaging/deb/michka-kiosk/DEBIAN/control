@@ -4,14 +4,14 @@ Section: x11
 Priority: optional
 Architecture: amd64
 Maintainer: Michka <michka@localhost>
-Depends: michka-hub (>= __VERSION__), cage, chromium, libegl1, libgles2, libgl1-mesa-dri, grim, wlr-randr, curl, pipewire, pipewire-pulse, pipewire-alsa, wireplumber, fonts-noto-cjk
+Depends: michka-hub (>= __VERSION__), cage, chromium, libegl1, libgles2, libgl1-mesa-dri, grim, wlr-randr, curl, pipewire, pipewire-pulse, pipewire-alsa, wireplumber, fonts-noto-cjk, polkitd
 Description: Michka kiosk display add-on (cage + Chromium on tty1)
  Turns a machine running the Michka hub into a self-contained touchscreen appliance: a
  wlroots-based Wayland kiosk (cage) launches Chromium full-screen against the local hub on
  tty1 at boot, with no desktop or display manager. Installing this package pulls in the full
- display stack (cage, Chromium, Mesa, grim, wlr-randr, PipeWire for audio) and switches the hub to run as root so
- it can drive the panel (screensaver screen-power, kiosk restart, exit-to-login). Removing it
- reverts the hub to the unprivileged user.
+ display stack (cage, Chromium, Mesa, grim, wlr-randr, PipeWire for audio). The hub stays
+ unprivileged: this package adds a polkit rule + helper units (michka-screen-on/off) so it can
+ drive the panel (screensaver screen-power, kiosk restart, exit-to-login) without running as root.
  .
  Designed for small touchscreens (e.g. a 1280x400 mini-rack panel). The screensaver "sleep"
  mode and Chinese font rendering need wlr-randr and fonts-noto-cjk respectively.

@@ -1,6 +1,7 @@
 #!/bin/sh
-# michka-kiosk postinst: enable the kiosk unit, switch the hub to root (drop-in shipped with this
-# package), and start the display. The hub restart picks up the kiosk.conf override.
+# michka-kiosk postinst: register the helper units + polkit rule (shipped in this package) and start
+# the display. The hub stays unprivileged (runs as the static "michka" group member) — it drives the
+# kiosk through the michka-screen-* units + systemctl, authorised by /etc/polkit-1/rules.d/49-michka.rules.
 set -e
 
 case "$1" in
@@ -9,19 +10,19 @@ case "$1" in
 
     if [ -d /run/systemd/system ]; then
       systemctl daemon-reload >/dev/null 2>&1 || true
-      # Re-launch the hub as root so it can drive the kiosk's Wayland session.
-      systemctl restart michka-hub.service >/dev/null 2>&1 || true
       systemctl enable michka-kiosk.service >/dev/null 2>&1 || true
       systemctl start michka-kiosk.service >/dev/null 2>&1 || true
     fi
+    # polkit picks up rules.d/*.rules automatically; nudge it in case it's already running.
+    systemctl reload polkit.service >/dev/null 2>&1 || systemctl restart polkit.service >/dev/null 2>&1 || true
 
-    # Print a summary so the apt/dpkg output tells the user what was installed and where.
     ver=$(dpkg-query -f '${Version}' -W michka-kiosk 2>/dev/null || echo "")
     echo ""
     echo "  Michka kiosk${ver:+ $ver} installed (touchscreen appliance add-on)."
     echo "    Launcher : /opt/michka/kiosk.sh"
     echo "    Service  : michka-kiosk.service  (cage + Chromium on tty1, enabled at boot)"
-    echo "    Note     : the hub now runs as root so it can drive the local display."
+    echo "    Privilege: the hub stays UNPRIVILEGED; display actions go via the michka-screen-* units"
+    echo "               + a polkit rule (/etc/polkit-1/rules.d/49-michka.rules). No root hub."
     echo "    Status   : sudo systemctl status michka-kiosk"
     echo "    Website  : michka.org"
     echo ""

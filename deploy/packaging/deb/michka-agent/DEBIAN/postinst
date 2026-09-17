@@ -11,6 +11,15 @@ case "$1" in
     fi
     chmod 0755 /opt/michka/michka_c 2>/dev/null || true
 
+    # The agent unpacks bundled native libs to an EXEC dir at startup; the DynamicUser StateDirectory
+    # is noexec, so the unit uses /var/lib/michka-agent-bundle (1777). Create it now, or the service
+    # crash-loops at the systemd NAMESPACE step (ReadWritePaths= on a missing path). tmpfiles first
+    # (also recreates it at boot), with a plain mkdir fallback if systemd-tmpfiles isn't available.
+    systemd-tmpfiles --create /usr/lib/tmpfiles.d/michka.conf >/dev/null 2>&1 || true
+    if [ ! -d /var/lib/michka-agent-bundle ]; then
+      mkdir -p /var/lib/michka-agent-bundle && chmod 1777 /var/lib/michka-agent-bundle
+    fi
+
     if [ -d /run/systemd/system ]; then
       systemctl daemon-reload >/dev/null 2>&1 || true
       systemctl enable michka-agent.service >/dev/null 2>&1 || true

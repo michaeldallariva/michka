@@ -1,0 +1,9 @@
+[Unit]
+Description=Michka kiosk: power the panel ON (wake from screensaver sleep)
+# Companion to michka-screen-off.service — see that unit's header. Triggered by the hub via
+# `systemctl start` (authorised by the michka polkit rule) to wake the panel.
+
+[Service]
+Type=oneshot
+Environment=XDG_RUNTIME_DIR=/run/user/0
+ExecStart=/bin/sh -c 'sock=$(ls /run/user/0/ 2>/dev/null | grep -E "^wayland-[0-9]+$" | head -1); export WAYLAND_DISPLAY=$sock; wlr-randr 2>/dev/null | grep -E "^[^[:space:]]" | cut -d " " -f1 | while read o; do wlr-randr --output "$o" --on; done'

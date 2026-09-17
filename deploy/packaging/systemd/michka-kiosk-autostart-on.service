@@ -1,0 +1,9 @@
+[Unit]
+Description=Michka: enable kiosk autostart at boot
+# Root helper the unprivileged hub triggers via `systemctl start` (authorised by the michka polkit
+# rule) to flip kiosk boot-autostart ON. enable/disable needs root / manage-unit-files, which the hub
+# can't do directly, so it delegates here. Companion: michka-kiosk-autostart-off.service.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl enable michka-kiosk.service
