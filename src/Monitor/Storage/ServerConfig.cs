@@ -14,6 +14,28 @@ public sealed class ServerConfig
     // Server
     public int? Port { get; set; }
 
+    // Shared secret that agents must present on /api/ingest (and which authorises the dashboard's
+    // admin endpoints from a non-browser client). Generated on first run; copy it into each agent's
+    // michka_c.conf. Empty disables token auth (not recommended).
+    public string Token { get; set; } = "";
+
+    // Whether /api/ingest enforces the token. "on" (default) = agents must present it; "off" = any LAN
+    // device may push without it (convenient, but anyone can then spoof metrics). The token value is
+    // kept either way so flipping this back on restores the same secret.
+    public string TokenRequired { get; set; } = "on";  // "on" | "off"
+
+    // Optional PIN gate on the dashboard UI. "off" (default) = open; "on" = a browser must enter the
+    // 6-digit PIN (numeric keypad login) before it can load the dashboard or read any UI data. PinHash
+    // is the PBKDF2 salted hash of the PIN (never the PIN itself); empty when no PIN is set. Agents are
+    // unaffected (they authenticate to /api/ingest with the token, not the PIN).
+    public string PinEnabled { get; set; } = "off";   // "on" | "off"
+    public string PinHash { get; set; } = "";
+
+    // Extra Host header values accepted by the DNS-rebinding guard, beyond the built-in defaults
+    // (loopback, any raw IP, this machine's name). Add a hostname/FQDN here to reach the hub by name.
+    // A single "*" entry disables the Host check entirely.
+    public List<string> HostAllow { get; set; } = new();
+
     // Kiosk autostart — whether michka-kiosk.service launches the dashboard automatically at boot
     // ("on") or must be started manually ("off"). Toggling it enables/disables the systemd unit.
     public string KioskAuto { get; set; } = "on";  // "on" | "off"
@@ -61,6 +83,19 @@ public sealed class ServerConfig
     public List<LayoutBox> Layout { get; set; } = new();
     public Dictionary<string, List<LayoutBox>> Layouts { get; set; } = new();
 
+    // Swipe-down Widgets-page placements, per host: the ordered list of placed widget type ids (one of
+    // each type per host). Stored server-side so the same host page shows the same widgets in every
+    // browser/session, like <see cref="Layouts"/>.
+    public Dictionary<string, List<string>> WidgetsByHost { get; set; } = new();
+
+    // Saved per-widget-type config blobs — a widget's own settings (weather towns, Pi-hole URL/password,
+    // uptime targets, NexusM server, …), keyed by widget type. Raw JSON so each widget owns its shape;
+    // global per type (a widget keeps any per-host detail inside its own blob) and shared whether the
+    // widget sits on the Widgets page or a board box. NOTE: a blob can hold credentials (e.g. a Pi-hole
+    // password); it round-trips through /api/server-config, so enable the UI PIN gate if the LAN isn't
+    // trusted.
+    public Dictionary<string, JsonElement> WidgetConfig { get; set; } = new();
+
     [JsonIgnore] public string Path { get; private set; } = "michka.conf";
 
     private static readonly JsonSerializerOptions Json = new()
@@ -83,8 +118,18 @@ public sealed class ServerConfig
         }
         catch { cfg = new ServerConfig(); }
         cfg.Path = path;
-        if (!existed) { try { cfg.Save(); } catch { /* best effort on first run */ } }
+        bool changed = cfg.EnsureToken();   // mint a secret for fresh or pre-token configs
+        if (!existed || changed) { try { cfg.Save(); } catch { /* best effort on first run */ } }
         return cfg;
+    }
+
+    /// <summary>Generate a shared secret if none is set yet (first run, or a config from before tokens
+    /// existed). Returns true when a new token was minted so the caller can persist it.</summary>
+    public bool EnsureToken()
+    {
+        if (!string.IsNullOrWhiteSpace(Token)) return false;
+        Token = Monitor.Api.Security.NewShortToken();
+        return true;
     }
 
     public void Save()

@@ -6,6 +6,7 @@ public sealed class Options
     public bool Agent { get; private set; }
     public string? Hub { get; private set; }
     public string? Name { get; private set; }
+    public string? Token { get; private set; }
     public int Port { get; private set; } = 5000;
     public bool PortSpecified { get; private set; }
     public int IntervalMs { get; private set; } = 1000;
@@ -35,6 +36,7 @@ public sealed class Options
                 case "-h" or "--help": o.ShowHelp = true; break;
                 case "--hub": o.Hub = Next(args, ref i, a); break;
                 case "--name": o.Name = Next(args, ref i, a); break;
+                case "--token": o.Token = Next(args, ref i, a); break;
                 case "--db": o.DbPath = Next(args, ref i, a); break;
                 case "--port": o.Port = ParseInt(Next(args, ref i, a), a); o.PortSpecified = true; break;
                 case "--interval": o.IntervalMs = ParseInt(Next(args, ref i, a), a); o.IntervalSpecified = true; break;
@@ -105,6 +107,7 @@ public sealed class Options
           --service            (Windows) run as a Windows service
           --hub <url>          Hub base URL to push to (overrides michka_c.conf)
           --name <name>        Host label reported to the hub (default: machine name)
+          --token <secret>     Shared secret for the hub (overrides michka_c.conf; from the hub's michka.conf)
           --port <n>           Hub HTTP port (overrides the saved server config; default 5000)
           --interval <ms>      Sample/push interval in ms (default: 1000, min 200)
           --no-local           Hub: do not collect the local machine

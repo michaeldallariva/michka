@@ -73,6 +73,10 @@ internal static class ProcRunner
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
+                // Suppress the console window. Without this, the Windows agent's ~10s sc.exe catalog
+                // poll flashes a black shell on the desktop (the GUI detaches its own console with
+                // FreeConsole, so each child console app would otherwise spawn a fresh window).
+                CreateNoWindow = true,
             };
             foreach (var a in args) psi.ArgumentList.Add(a);
             using var p = Process.Start(psi);

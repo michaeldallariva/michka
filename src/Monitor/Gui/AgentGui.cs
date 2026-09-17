@@ -54,6 +54,7 @@ internal sealed class AgentForm : Form
     private Label _urlPreview = null!;
     private TextBox _name = null!;
     private NumericUpDown _interval = null!;
+    private TextBox _token = null!;
     private Button _btnSave = null!, _btnTest = null!, _btnRun = null!;
     private Label _svcStatus = null!;
     private Button _btnInstall = null!, _btnUninstall = null!, _btnSvcStart = null!, _btnSvcStop = null!;
@@ -82,7 +83,7 @@ internal sealed class AgentForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(460, 574);
+        ClientSize = new Size(460, 606);
         BackColor = Color.FromArgb(245, 246, 248);
 
         // Logo (the network-nodes app icon) top-left, with the title beside it and an About button
@@ -130,7 +131,7 @@ internal sealed class AgentForm : Form
         gHub.Controls.Add(_urlPreview);
 
         // ---- Agent group ----
-        var gAgent = new GroupBox { Text = "Agent", Location = new Point(14, 218), Size = new Size(432, 96) };
+        var gAgent = new GroupBox { Text = "Agent", Location = new Point(14, 218), Size = new Size(432, 128) };
         Controls.Add(gAgent);
 
         gAgent.Controls.Add(new Label { Text = "Name", AutoSize = true, Location = new Point(14, 28) });
@@ -141,21 +142,25 @@ internal sealed class AgentForm : Form
         _interval = new NumericUpDown { Location = new Point(120, 56), Size = new Size(110, 24), Minimum = 200, Maximum = 600000, Increment = 100, Value = 1000 };
         gAgent.Controls.Add(_interval);
 
+        gAgent.Controls.Add(new Label { Text = "Token", AutoSize = true, Location = new Point(14, 96) });
+        _token = new TextBox { Location = new Point(120, 92), Size = new Size(296, 24), PlaceholderText = "shared secret — copy from the hub's michka.conf" };
+        gAgent.Controls.Add(_token);
+
         // ---- Action buttons ----
-        _btnSave = new Button { Text = "Save", Location = new Point(14, 326), Size = new Size(96, 30) };
+        _btnSave = new Button { Text = "Save", Location = new Point(14, 358), Size = new Size(96, 30) };
         _btnSave.Click += (_, _) => { SaveToConfig(); Log("Saved " + _cfg.Path); };
         Controls.Add(_btnSave);
 
-        _btnTest = new Button { Text = "Test connection", Location = new Point(118, 326), Size = new Size(130, 30) };
+        _btnTest = new Button { Text = "Test connection", Location = new Point(118, 358), Size = new Size(130, 30) };
         _btnTest.Click += async (_, _) => await TestConnectionAsync();
         Controls.Add(_btnTest);
 
-        _btnRun = new Button { Text = "Start agent", Location = new Point(256, 326), Size = new Size(190, 30) };
+        _btnRun = new Button { Text = "Start agent", Location = new Point(256, 358), Size = new Size(190, 30) };
         _btnRun.Click += (_, _) => ToggleAgent();
         Controls.Add(_btnRun);
 
         // ---- Service group ----
-        var gSvc = new GroupBox { Text = "Windows service", Location = new Point(14, 366), Size = new Size(432, 96) };
+        var gSvc = new GroupBox { Text = "Windows service", Location = new Point(14, 398), Size = new Size(432, 96) };
         Controls.Add(gSvc);
 
         _svcStatus = new Label { Text = "Status: …", AutoSize = true, Location = new Point(14, 26) };
@@ -178,7 +183,7 @@ internal sealed class AgentForm : Form
         gSvc.Controls.Add(_btnSvcStop);
 
         // ---- Log ----
-        _log = new TextBox { Location = new Point(14, 470), Size = new Size(432, 92), Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BackColor = Color.White };
+        _log = new TextBox { Location = new Point(14, 502), Size = new Size(432, 92), Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BackColor = Color.White };
         Controls.Add(_log);
     }
 
@@ -190,6 +195,7 @@ internal sealed class AgentForm : Form
         _port.Value = Math.Clamp(_cfg.Port, (int)_port.Minimum, (int)_port.Maximum);
         _name.Text = _cfg.Name;
         _interval.Value = Math.Clamp(_cfg.IntervalMs, (int)_interval.Minimum, (int)_interval.Maximum);
+        _token.Text = _cfg.Token;
         UpdateUrlPreview();
     }
 
@@ -200,6 +206,7 @@ internal sealed class AgentForm : Form
         _cfg.Port = (int)_port.Value;
         _cfg.Name = _name.Text.Trim();
         _cfg.IntervalMs = (int)_interval.Value;
+        _cfg.Token = _token.Text.Trim();
         try { _cfg.Save(); }
         catch (Exception ex) { Log("Could not save config: " + ex.Message); }
         UpdateUrlPreview();
@@ -241,7 +248,7 @@ internal sealed class AgentForm : Form
             var token = _runCts.Token;
             _runTask = Task.Run(async () =>
             {
-                try { await AgentRunner.RunLoopAsync(r.HubUrl!, r.Name, r.IntervalMs, Log, token); }
+                try { await AgentRunner.RunLoopAsync(r.HubUrl!, r.Name, r.IntervalMs, Log, token, r.Token); }
                 catch (OperationCanceledException) { }
                 catch (Exception ex) { Log("Agent error: " + ex.Message); }
             });
@@ -269,7 +276,7 @@ internal sealed class AgentForm : Form
 
     private void SetSettingsEnabled(bool on)
     {
-        _scheme.Enabled = _host.Enabled = _port.Enabled = _name.Enabled = _interval.Enabled = _btnSave.Enabled = on;
+        _scheme.Enabled = _host.Enabled = _port.Enabled = _name.Enabled = _interval.Enabled = _token.Enabled = _btnSave.Enabled = on;
     }
 
     // ---------------- Windows service (sc.exe) ----------------
@@ -433,7 +440,7 @@ internal sealed class AgentForm : Form
             Size = new Size(dlg.ClientSize.Width - 48, 230),
             Text =
                 "Authors  :  Michael DALLA RIVA / Patrick DUQUESNOY\r\n" +
-                "Version  :  michka_c (michka client) v1.3\r\n" +
+                "Version  :  michka_c (michka client) v1.6\r\n" +
                 "Website  :  michka.org\r\n" +
                 "\r\n" +
                 "Licenses and libraries :\r\n" +

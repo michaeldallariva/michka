@@ -44,7 +44,7 @@ internal sealed class AgentBackgroundService(Options opt, ILogger<AgentBackgroun
         try
         {
             await AgentRunner.RunLoopAsync(r.HubUrl!, r.Name, r.IntervalMs,
-                m => logger.LogInformation("{Message}", m), stoppingToken);
+                m => logger.LogInformation("{Message}", m), stoppingToken, r.Token);
         }
         catch (OperationCanceledException) { /* service stopping */ }
     }

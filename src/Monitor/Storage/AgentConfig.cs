@@ -25,6 +25,10 @@ public sealed class AgentConfig
     /// <summary>Sample/push interval in milliseconds (min 200).</summary>
     public int IntervalMs { get; set; } = 1000;
 
+    /// <summary>Shared secret the hub requires on pushes. Copy this from the hub's <c>michka.conf</c>
+    /// (<c>token</c>). Empty = send no token (works only against a hub with token auth disabled).</summary>
+    public string Token { get; set; } = "";
+
     /// <summary>The hub base URL built from <see cref="Scheme"/>/<see cref="Host"/>/<see cref="Port"/>.</summary>
     [JsonIgnore]
     public string HubUrl => $"{Scheme}://{Host}:{Port}";

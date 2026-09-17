@@ -9,7 +9,7 @@ const COLORS = {
 const SERIES_CAP = 60;
 
 /* ---------------- settings (persisted server-side in michka.conf) ---------------- */
-const SETTINGS_DEFAULTS = { lang: "en", tempUnit: "C", cores: "on", cycle: "off", cycleSec: "10", dateFmt: "us", screenSize: "1280x400", ssMode: "off", ssTimeout: "20", kioskAuto: "on", template: "" };
+const SETTINGS_DEFAULTS = { lang: "en", tempUnit: "C", cores: "on", cycle: "off", cycleSec: "10", dateFmt: "us", screenSize: "1280x400", ssMode: "off", ssTimeout: "20", kioskAuto: "on", tokenRequired: "on", pinEnabled: "off", template: "" };
 const settings = { ...SETTINGS_DEFAULTS };
 
 /* ---------------- i18n ----------------
@@ -39,6 +39,7 @@ function applyTranslations(root) {
   root.querySelectorAll("[data-i18n-html]").forEach((el) => { el.innerHTML = t(el.getAttribute("data-i18n-html")); });
   root.querySelectorAll("[data-i18n-ph]").forEach((el) => { el.setAttribute("placeholder", t(el.getAttribute("data-i18n-ph"))); });
   root.querySelectorAll("[data-i18n-aria]").forEach((el) => { el.setAttribute("aria-label", t(el.getAttribute("data-i18n-aria"))); });
+  root.querySelectorAll("[data-i18n-title]").forEach((el) => { el.setAttribute("title", t(el.getAttribute("data-i18n-title"))); });
 }
 async function loadLang(code) {
   code = code || "en";
@@ -65,6 +66,90 @@ async function postConfig(patch) {
     return r.ok ? await r.json() : null;
   } catch { return null; }
 }
+/* ---- agent token reveal / copy / regenerate (Settings -> Server) ---- */
+let _tokenVal = null;       // cached real token once fetched from /api/token
+let _tokenShown = false;    // whether the field currently shows the real token vs the mask
+const tokMask = () => "•".repeat(6);
+async function fetchToken(force) {
+  if (_tokenVal != null && !force) return _tokenVal;
+  try {
+    const r = await fetch("/api/token");
+    if (!r.ok) return null;
+    const j = await r.json();
+    _tokenVal = j.token || "";
+    return _tokenVal;
+  } catch { return null; }
+}
+function showToken(show) {
+  _tokenShown = show;
+  const inp = $("tokenInput"), btn = $("tokenReveal");
+  if (inp) inp.value = show ? (_tokenVal || "") : tokMask();
+  if (btn) btn.textContent = show ? t("settings.hide") : t("settings.reveal");
+}
+function updateTokenRow() {
+  const row = $("tokenRow");
+  if (row) row.classList.toggle("dim", settings.tokenRequired === "off");
+}
+
+/* ---- optional UI PIN lock (Settings -> Server) ---- */
+// A small numeric keypad popup to collect a 6-digit PIN; calls cb(pin) once 6 digits are entered.
+function pinPrompt(title, cb) {
+  const ov = document.createElement("div");
+  ov.className = "pin-overlay";
+  ov.innerHTML =
+    '<div class="pin-card"><div class="pin-title"></div>' +
+    '<div class="pin-dots">' + '<span class="pin-dot"></span>'.repeat(6) + '</div>' +
+    '<div class="pin-pad"></div><button class="pin-cancel"></button></div>';
+  ov.querySelector(".pin-title").textContent = title;
+  ov.querySelector(".pin-cancel").textContent = t("common.cancel");
+  document.body.appendChild(ov);
+  let val = "";
+  const dots = ov.querySelectorAll(".pin-dot");
+  const paint = () => dots.forEach((d, i) => d.classList.toggle("on", i < val.length));
+  const close = () => ov.remove();
+  const pad = ov.querySelector(".pin-pad");
+  ["1","2","3","4","5","6","7","8","9","","0","back"].forEach((k) => {
+    const b = document.createElement("button");
+    if (k === "") { b.className = "pin-key blank"; b.disabled = true; }
+    else if (k === "back") { b.className = "pin-key"; b.textContent = "⌫"; b.onclick = () => { val = val.slice(0, -1); paint(); }; }
+    else { b.className = "pin-key"; b.textContent = k; b.onclick = () => { if (val.length < 6) { val += k; paint(); if (val.length === 6) { const v = val; close(); cb(v); } } }; }
+    pad.appendChild(b);
+  });
+  ov.querySelector(".pin-cancel").onclick = close;
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+}
+function refreshPinUI() {
+  const box = $("pinControls");
+  if (!box) return;
+  box.innerHTML = "";
+  const mk = (key, cls, fn) => { const b = document.createElement("button"); b.className = "btn" + (cls ? " " + cls : ""); b.textContent = t(key); b.onclick = fn; return b; };
+  if (settings.pinEnabled === "on") {
+    box.append(mk("settings.pinLockNow", "", pinLockNow), mk("settings.pinChange", "", pinSet), mk("settings.pinDisable", "danger", pinDisable));
+  } else {
+    box.append(mk("settings.pinSet", "", pinSet));
+  }
+}
+function pinSet() {
+  pinPrompt(t("settings.pinEnterNew"), (p1) => {
+    pinPrompt(t("settings.pinConfirm"), async (p2) => {
+      if (p1 !== p2) { showToast(t("toast.pinMismatch"), "err"); return; }
+      const res = await postConfig({ pinEnabled: "on", pin: p1 });
+      if (res) { settings.pinEnabled = "on"; refreshPinUI(); showToast(t("toast.pinEnabled"), "ok"); }
+      else showToast(t("toast.pinError"), "err");
+    });
+  });
+}
+async function pinDisable() {
+  if (!confirm(t("confirm.pinDisable"))) return;
+  const res = await postConfig({ pinEnabled: "off" });
+  if (res) { settings.pinEnabled = "off"; refreshPinUI(); showToast(t("toast.pinDisabled"), "ok"); }
+  else showToast(t("toast.pinError"), "err");
+}
+async function pinLockNow() {
+  try { await fetch("/api/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }); } catch { /* ignore */ }
+  location.href = "/login";
+}
+
 const toF = (c) => c * 9 / 5 + 32;
 
 function fmtBytes(b) {
@@ -261,6 +346,7 @@ function render() {
 
   // Disks
   if ($("diskList")) renderDisks(snap.disks || []);
+  renderDiskPopup(snap.disks || []);   // keep the full-list popup live while it's open
 
   // Thermals + load (Linux) OR disk-I/O + system (Windows, which sends `sys` and no thermals).
   if (tempGauge && $("loadBox")) {
@@ -381,9 +467,46 @@ function renderDisks(disks) {
   const rows = box.children;
   disks.forEach((d, i) => {
     const el = rows[i]; if (!el) return;
-    el.querySelector(".mnt").textContent = d.mount;
+    const mnt = el.querySelector(".mnt");
+    mnt.textContent = d.mount;
+    mnt.title = d.mount;   // full path on hover (the inline label may be ellipsised)
     el.querySelector(".cap").textContent = `${fmtBytes(d.usedBytes)} / ${fmtBytes(d.totalBytes)} · ${(d.pct || 0).toFixed(0)}%`;
     const fill = el.querySelector(".fill");
+    fill.style.width = `${d.pct || 0}%`;
+    fill.classList.toggle("warn", (d.pct || 0) >= 85);
+  });
+}
+
+/* Full mount list, opened by tapping a Disks box. The inline box only shows the top few mounts
+   (truncated to fit), so this popup lists EVERY mount with full names + usage; it scrolls when the
+   host has more drives than fit, so we're never stuck at a fixed count. Skin-independent: it reads
+   the live disks straight from the snapshot, so it works under any template. */
+function openDiskPopup() {
+  $("popupScrim").classList.remove("hidden");
+  $("diskPopup").classList.remove("hidden");
+  const snap = state.latest.get(state.selected);
+  renderDiskPopup((snap && snap.disks) || []);
+}
+function renderDiskPopup(disks) {
+  const p = $("diskPopup");
+  if (!p || p.classList.contains("hidden")) return;   // only refresh while open
+  const list = $("diskPopupList");
+  disks = disks || [];
+  if (!disks.length) { list.innerHTML = `<div class="dp-empty">${esc(t("disk.none"))}</div>`; return; }
+  if (list.childElementCount !== disks.length) {
+    list.innerHTML = "";
+    disks.forEach(() => {
+      const r = document.createElement("div"); r.className = "dp-row";
+      r.innerHTML = `<div class="dp-top"><span class="dp-mnt"></span><span class="dp-cap"></span></div><div class="dp-track"><div class="dp-fill"></div></div>`;
+      list.appendChild(r);
+    });
+  }
+  const rows = list.children;
+  disks.forEach((d, i) => {
+    const el = rows[i]; if (!el) return;
+    el.querySelector(".dp-mnt").textContent = d.mount;
+    el.querySelector(".dp-cap").textContent = `${fmtBytes(d.usedBytes)} / ${fmtBytes(d.totalBytes)} · ${(d.pct || 0).toFixed(0)}%`;
+    const fill = el.querySelector(".dp-fill");
     fill.style.width = `${d.pct || 0}%`;
     fill.classList.toggle("warn", (d.pct || 0) >= 85);
   });
@@ -501,15 +624,28 @@ const LAYOUT_GAP = 10;
 function reflowStandard() {
   const board = $("board");
   const H = board.clientHeight || 330;
+  const W = board.clientWidth || 1260;
   const std = layout.filter((b) => !FLOATS(b.type))
                     .sort((a, b) => (a.x + a.w / 2) - (b.x + b.w / 2));
+  if (!std.length) return;
+  // Refit the row to the board WIDTH too (not just x/height): scale every box width proportionally so
+  // the boxes always exactly fill the board, keeping their relative sizes (e.g. the wider Network box).
+  // Without this the row uses whatever widths were saved/added, so a layout sized for a different board
+  // width — or left over after a box was added/removed — runs too wide and the last box (Disks) sticks
+  // out past the right edge. Proportional + idempotent: once the row fits, re-running changes nothing.
+  const availW = Math.max(1, W - LAYOUT_GAP * (std.length - 1));
+  const sumW = std.reduce((a, b) => a + (b.w || 1), 0) || 1;
   let x = 0;
   std.forEach((b) => {
+    b.w = Math.max(40, Math.round(availW * (b.w || 1) / sumW));
     b.x = Math.round(x);
     b.y = 0;
     b.h = H;
     x += b.w + LAYOUT_GAP;
   });
+  // Snap the last box to the board's right edge so rounding never leaves a sliver gap or overflow.
+  const last = std[std.length - 1];
+  last.w = Math.max(40, W - last.x);
 }
 
 // Push the model's x/y/height onto the live DOM elements; with the CSS left/top transition this
@@ -521,6 +657,7 @@ function applyPositions() {
     if (!el) return;
     el.style.left = b.x + "px";
     el.style.top = b.y + "px";
+    el.style.width = b.w + "px";
     el.style.height = b.h + "px";
   });
 }
@@ -726,6 +863,12 @@ function wireBox(el, box) {
       try { el.setPointerCapture(e.pointerId); } catch { /* ignore */ }
     }, BOX_HOLD_MS);
   });
+
+  // A quick tap on the Disks box (no hold ⇒ no arm/menu) opens the full mount-list popup.
+  // boxInteracting stays true through a drag/menu release, so this only fires on a genuine tap.
+  if (box.type === "storage") {
+    el.addEventListener("click", () => { if (!boxInteracting) openDiskPopup(); });
+  }
 }
 
 /* ---- box context menu + add chooser ---- */
@@ -782,6 +925,7 @@ function closePopups() {
   $("boxAdd").classList.add("hidden");
   $("widgetChooser").classList.add("hidden");
   $("hostMenu").classList.add("hidden");
+  $("diskPopup").classList.add("hidden");
   $("popupScrim").classList.add("hidden");
   menuBox = null;
   pendingHost = null;
@@ -795,6 +939,7 @@ function wireBoard() {
     };
   });
   $("popupScrim").onclick = closePopups;
+  $("diskPopup").querySelector(".store-close").onclick = closePopups;
   observeBoard();   // keep box heights pinned to the board if it later resizes (e.g. a template grows the top bar)
 }
 
@@ -899,7 +1044,10 @@ function wireServices() {
    search, and "num" (a 0-9 keypad) for numeric fields like the HTTP port. It edits whatever input
    is passed to showOsk() and re-runs an optional onInput callback after each keystroke. A top-bar
    X always closes it (the kiosk has no physical keyboard, so there's no other way to dismiss it). */
-const OSK_ROWS = ["1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm"];
+// Text keyboard: letters only (no digit row) — town/service searches are alphabetic, and dropping the
+// row keeps the keyboard short enough on the 1280x400 panel that the field above it stays visible.
+// Numeric fields (HTTP port) use the separate "num" keypad.
+const OSK_ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
 const OSK_NUM_ROWS = ["123", "456", "789"];
 let oskTarget = null;   // input element currently being edited
 let oskOnInput = null;  // optional callback after each change
@@ -1057,7 +1205,7 @@ async function deleteHost(name) {
   } catch { showToast(typeof t === "function" ? t("host.removeError") : "Could not remove host", "err"); return; }
 
   forgetHostLocal(name);
-  if (widgetsByHost[name]) { delete widgetsByHost[name]; saveWidgets(); }
+  if (widgetsByHost[name]) { delete widgetsByHost[name]; postConfig({ widgetsHost: name, widgets: [] }); }
   if (state.selected === name) {
     state.selected = null;
     const names = [...state.hosts.keys()].sort((a, b) => a.localeCompare(b));
@@ -1160,7 +1308,7 @@ function startClock() {
   document.addEventListener("michka:settingschange", (e) => { if (e.detail && e.detail.key === "dateFmt") tickClock(); });
 }
 
-// Big top-left date+time clock — folded in from the former "Futura" template
+// Big top-left date+time clock (the default look)
 // (now the default look). Builds its own element as the first item of the
 // dashboard top bar (CSS hides the wordmark + the small status clock) and ticks
 // once a second, honouring the global "Time & date format" setting. Idempotent so
@@ -1311,10 +1459,45 @@ function wireSettings() {
   $("exitUiBtn").onclick = async () => {
     if (!confirm(t("confirm.exitUi"))) return;
     try {
-      const r = await fetch("/api/system/exit-ui", { method: "POST" });
+      const r = await fetch("/api/system/exit-ui", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
       if (!r.ok) showToast(t("toast.exitUnavailable"), "err");
     } catch { showToast(t("toast.exitFailed"), "err"); }
   };
+
+  // Server: agent token reveal / copy / regenerate
+  $("tokenReveal").onclick = async () => {
+    if (_tokenShown) { showToken(false); return; }
+    const tk = await fetchToken();
+    if (tk == null) { showToast(t("toast.tokenError"), "err"); return; }
+    showToken(true);
+  };
+  $("tokenCopy").onclick = async () => {
+    const tk = await fetchToken();
+    if (!tk) { showToast(t("toast.tokenError"), "err"); return; }
+    let ok = false;
+    try { await navigator.clipboard.writeText(tk); ok = true; }
+    catch {
+      // Clipboard API needs a secure context; fall back to a hidden selection copy over plain HTTP.
+      try {
+        const i = $("tokenInput"); i.value = tk; i.removeAttribute("readonly");
+        i.select(); ok = document.execCommand("copy"); i.setAttribute("readonly", "");
+        showToken(_tokenShown);
+      } catch { /* ignore */ }
+    }
+    showToast(ok ? t("toast.tokenCopied") : t("toast.tokenError"), ok ? "ok" : "err");
+  };
+  $("tokenRegen").onclick = async () => {
+    if (!confirm(t("confirm.tokenRegen"))) return;
+    const res = await postConfig({ regenToken: true });
+    if (!res) { showToast(t("toast.tokenError"), "err"); return; }
+    await fetchToken(true);   // refetch the new value
+    showToken(true);          // reveal it so the user can copy it straight away
+    showToast(t("toast.tokenRegen"), "ok");
+  };
+  // Dim/undim the token row live when the requirement is toggled.
+  document.addEventListener("michka:settingschange", (e) => {
+    if (e.detail && e.detail.key === "tokenRequired") updateTokenRow();
+  });
 
   // Screensaver: timeout slider + preview button
   $("ssTimeout").addEventListener("input", () => {
@@ -1348,6 +1531,10 @@ async function loadServerConfig() {
     if (langSel) langSel.value = settings.lang || "en";
     loadLang(settings.lang || "en");
     if (c.port != null) $("portInput").value = c.port;
+    if (c.tokenRequired) settings.tokenRequired = c.tokenRequired;
+    _tokenVal = null; showToken(false); updateTokenRow();   // mask the token until the user reveals it
+    if (c.pinEnabled) settings.pinEnabled = c.pinEnabled;
+    refreshPinUI();
     $("srvHub").textContent = `${c.hostName} : ${c.port}`;
     $("srvPlatform").textContent = c.platform || "--";
 
@@ -1359,7 +1546,20 @@ async function loadServerConfig() {
     if (state.selected) applyHostLayout(state.selected);
     renderServiceList();
 
+    // Server-persisted widget state (placements per host + per-type config blobs). Map each host's
+    // saved type list back to {id,type} instances (id===type). If the Widgets page is currently open,
+    // re-render it now that the real selections have arrived.
+    widgetConfig = (c.widgetConfig && typeof c.widgetConfig === "object") ? c.widgetConfig : {};
+    const wbh = (c.widgetsByHost && typeof c.widgetsByHost === "object") ? c.widgetsByHost : {};
+    widgetsByHost = {};
+    Object.keys(wbh).forEach((h) => {
+      widgetsByHost[h] = (Array.isArray(wbh[h]) ? wbh[h] : []).map((type) => ({ id: type, type }));
+    });
+    migrateLocalWidgets();   // one-time: seed the server from any old per-browser localStorage widget state
+    if (vOpen === "widgets") renderWidgets();
+
     applyTemplate(c.template || "");
+    if (!c.template) revealBoard();   // default look has no template CSS to wait on — show the board now
     loadTemplateGrid();
     applyScreenSize();
 
@@ -1374,9 +1574,44 @@ async function loadServerConfig() {
 /* ---------------- UI templates (drop-in custom skins) ----------------
    A template is a folder under the on-disk templates/ directory holding style.css / script.js /
    preview.png. Selecting one layers its CSS + JS over the built-in default; empty id = default. */
+// The board is hidden (body.booting) during initial load so a board-replacing template (LAZY)
+// doesn't flash the default boxes first. revealBoard() clears it exactly once — fired when the active
+// template's CSS goes live (below), immediately for the default look, or by a hard timeout net.
+let __boardRevealed = false;
+function revealBoard() {
+  if (__boardRevealed) return;
+  __boardRevealed = true;
+  document.body.classList.remove("booting");
+}
+
+// Top-right report button: open the selected host's self-contained HTML report (7-day overview
+// charts) in a new browser tab. The hub builds the page at /api/report (inlined ECharts + data), so
+// it renders offline and the page's own Download button can save it locally.
+function wireReport() {
+  const btn = $("reportBtn");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    const host = state.selected;
+    if (!host) return;
+    window.open(`/api/report?host=${encodeURIComponent(host)}`, "_blank", "noopener");
+  });
+}
+
 function applyTemplate(id) {
+  // Set the template's design body-class up front (convention: body.<lowercased-id>-design, the same
+  // class the template's script.js toggles). Doing it here — before the stylesheet loads and before
+  // script.js runs — means the template's body-scoped CSS is already in effect the instant its
+  // stylesheet goes live, so the default look never flashes through on first load or on a switch.
+  const prev = settings.template;
+  if (prev) document.body.classList.remove(prev.toLowerCase() + "-design");
+  if (id) document.body.classList.add(id.toLowerCase() + "-design");
+
   const css = $("tplCss");
-  if (css) css.href = id ? `/templates/${encodeURIComponent(id)}/style.css` : "";
+  if (css) {
+    // Reveal the board the moment the template's stylesheet is live (no default-skin flash on boot).
+    css.onload = id ? revealBoard : null;
+    css.href = id ? `/templates/${encodeURIComponent(id)}/style.css` : "";
+  }
   // Drop any previously-injected template script before adding the new one.
   document.querySelectorAll("script[data-tpl-script]").forEach((s) => s.remove());
   if (id) {
@@ -1837,19 +2072,74 @@ let widgetCatalogLoaded = false;
 const widgetAssetLoads = {};          // type -> Promise<bool> (load script/css once)
 const mountedWidgets = new Map();     // instance id -> { def, ctx } currently mounted on the page
 
-const WIDGETS_LS_KEY = "michka.widgetsByHost";
+// Widget state is persisted SERVER-SIDE (michka.conf via /api/server-config), NOT per-browser
+// localStorage, so the same host page shows the same configured widgets in every browser/session.
+// `widgetsByHost`: per host, the placed widgets as {id,type} (id===type — one of each type per host).
+// `widgetConfig`: per widget TYPE, the widget's own saved settings blob (global per type; a widget keeps
+// any per-host detail inside its own blob). Both are loaded in loadServerConfig().
 let widgetsByHost = {};
-function loadWidgets() {
-  try { widgetsByHost = JSON.parse(localStorage.getItem(WIDGETS_LS_KEY)) || {}; }
-  catch { widgetsByHost = {}; }
-}
-function saveWidgets() {
-  try { localStorage.setItem(WIDGETS_LS_KEY, JSON.stringify(widgetsByHost)); } catch { /* ignore */ }
-}
+let widgetConfig = {};
 function widgetsForHost(host) {
   if (!host) return [];
   if (!Array.isArray(widgetsByHost[host])) widgetsByHost[host] = [];
   return widgetsByHost[host];
+}
+// Persist a host's placement list (just the type ids; the server keys them by host).
+function saveWidgetsForHost(host) {
+  if (!host) return;
+  postConfig({ widgetsHost: host, widgets: widgetsForHost(host).map((w) => w.type) });
+}
+// One-time migration: widget state used to live in per-browser localStorage. If the server has none
+// yet but this browser holds the old keys, push them up so the user's existing widgets + settings
+// survive the upgrade (the first browser to load seeds the hub; thereafter the server is the source).
+function migrateLocalWidgets() {
+  try {
+    // Run exactly ONCE per browser (the first load after upgrade), then never again — so a later
+    // removal sticks instead of the old localStorage re-seeding it on every load.
+    if (localStorage.getItem("michka.widgetsMigrated")) return false;
+    localStorage.setItem("michka.widgetsMigrated", "1");
+
+    // Per-type config blobs (old localStorage key -> widget type id). This browser pushes whatever real
+    // config it has, overwriting the server's (safe because it's flag-guarded to run once per browser —
+    // so a browser with the real settings tops up an earlier browser that seeded only empty defaults).
+    const keymap = { weather: "michka.weather", pihole: "michka.pihole", uptime: "michka.uptime", "nexusm-music": "michka.nexusm" };
+    const cfgOut = {};
+    Object.keys(keymap).forEach((type) => {
+      const raw = localStorage.getItem(keymap[type]);
+      if (raw) { try { cfgOut[type] = JSON.parse(raw); } catch { /* skip bad blob */ } }
+    });
+    if (Object.keys(cfgOut).length) { Object.assign(widgetConfig, cfgOut); postConfig({ widgetConfig: cfgOut }); }
+
+    // Placements (old michka.widgetsByHost = { host: [{id,type}] }) — UNION this browser's old set into
+    // whatever the server already has for each host, so a browser with a fuller set tops it up.
+    let oldPlace = null;
+    try { oldPlace = JSON.parse(localStorage.getItem("michka.widgetsByHost") || "null"); } catch { /* ignore */ }
+    if (oldPlace && typeof oldPlace === "object") {
+      Object.keys(oldPlace).forEach((host) => {
+        const oldTypes = (Array.isArray(oldPlace[host]) ? oldPlace[host] : []).map((w) => w && w.type).filter(Boolean);
+        if (!oldTypes.length) return;
+        const cur = widgetsForHost(host).map((w) => w.type);
+        const merged = cur.slice();
+        oldTypes.forEach((tp) => { if (!merged.includes(tp)) merged.push(tp); });
+        if (merged.length !== cur.length) {
+          widgetsByHost[host] = merged.map((type) => ({ id: type, type }));
+          postConfig({ widgetsHost: host, widgets: merged });
+        }
+      });
+    }
+    return true;
+  } catch { return false; }
+}
+
+// A widget reads/writes its own config blob through ctx.getConfig()/setConfig() (see widgetCtx).
+function widgetConfigFor(type) {
+  const c = widgetConfig[type];
+  return c ? JSON.parse(JSON.stringify(c)) : {};   // clone so the widget can mutate freely
+}
+function saveWidgetConfig(type, obj) {
+  if (!type) return;
+  widgetConfig[type] = obj;
+  postConfig({ widgetConfig: { [type]: obj } });   // server merges per type
 }
 
 // Fetch the available widget types from the hub (once; pass force to refresh).
@@ -1899,6 +2189,11 @@ function widgetCtx(w, el) {
     meta: widgetDefs[w.type] || {},
     t, esc, fmtBytes,
     api: (path) => fetch(path).then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
+    // Server-persisted per-type config (replaces each widget's old localStorage). getConfig returns a
+    // clone of the saved blob ({} if none); setConfig saves it (round-trips to michka.conf) so it's the
+    // same in every browser.
+    getConfig: () => widgetConfigFor(w.type),
+    setConfig: (obj) => saveWidgetConfig(w.type, obj),
   };
 }
 
@@ -1998,8 +2293,8 @@ function addWidget(type) {
   if (!state.selected) return;
   const list = widgetsForHost(state.selected);
   if (list.some((w) => w.type === type)) return;   // one of each type per host — no duplicates
-  list.push({ id: uid(), type });
-  saveWidgets();
+  list.push({ id: type, type });                    // id === type (unique per host)
+  saveWidgetsForHost(state.selected);
   renderWidgets();
 }
 function removeWidget(id) {
@@ -2007,7 +2302,7 @@ function removeWidget(id) {
   const m = mountedWidgets.get(id);
   if (m) { try { if (typeof m.def.unmount === "function") m.def.unmount(m.ctx); } catch { /* ignore */ } mountedWidgets.delete(id); }
   widgetsByHost[host] = widgetsForHost(host).filter((w) => w.id !== id);
-  saveWidgets();
+  saveWidgetsForHost(host);
   renderWidgets();
 }
 async function openWidgetChooser() {
@@ -2042,13 +2337,15 @@ async function openWidgetChooser() {
 
 /* ---------------- boot ---------------- */
 window.addEventListener("DOMContentLoaded", async () => {
+  document.body.classList.add("booting");   // hide the board until the persisted template is applied (no default-skin flash)
+  setTimeout(revealBoard, 1500);            // safety net: never leave the board hidden if config/template load stalls
   await loadLang(settings.lang);  // English by default; applies translations + the initial board render
   startClock();
-  buildTopClock();   // big top-left clock (default look, folded in from Futura)
+  buildTopClock();   // big top-left clock (default look)
   initCursorAutoHide();
-  loadWidgets();
-  ensureWidgetCatalog();   // discover on-disk widget types in the background
+  ensureWidgetCatalog();   // discover on-disk widget types in the background (state loads via loadServerConfig)
   wireSettings();
+  wireReport();
   wireBoard();
   wireHostMenu();
   wireServices();

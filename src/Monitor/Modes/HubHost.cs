@@ -56,7 +56,7 @@ public static class HubHost
             WidgetsDir = widgetsDir,
         };
 
-        // Monitored services used to be one global list (the hub's own host); they're per-host now.
+        // Monitored services are tracked per-host.
         // Migrate the legacy list into this host's entry once, so existing setups keep their boxes.
         if (config.Services.Count > 0 && !config.ServicesByHost.ContainsKey(runtime.HostName))
         {
@@ -68,6 +68,7 @@ public static class HubHost
         builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
         builder.Services.AddSingleton(new MetricsStore(opt.DbPath));
+        builder.Services.AddSingleton<Monitor.Api.AuthState>();
         builder.Services.AddSingleton<LiveBroadcaster>();
         builder.Services.AddSingleton(opt);
         builder.Services.AddSingleton(runtime);
@@ -76,17 +77,57 @@ public static class HubHost
 
         var app = builder.Build();
 
+        // Security guards (the listener is open on 0.0.0.0, with no user login): reject unexpected
+        // Host headers (DNS-rebinding) and require JSON bodies on mutating /api calls (form/no-cors
+        // CSRF). Per-endpoint token / same-origin checks live in the endpoint handlers.
+        app.Use(Monitor.Api.Security.HostAllowlist(config.HostAllow));
+        app.Use(Monitor.Api.Security.JsonContentType);
+
+        // Optional UI PIN gate: when enabled, every browser request needs a valid PIN session, except
+        // the login page + its API and agent ingest (which is token-authenticated, not PIN). An
+        // unauthenticated browser navigation is redirected to /login; an unauthenticated API/XHR gets a
+        // 401 so the SPA can redirect. Reads config.PinEnabled live, so toggling it takes effect at once.
+        var auth = app.Services.GetRequiredService<Monitor.Api.AuthState>();
+        app.Use(async (ctx, next) =>
+        {
+            if (config.PinEnabled != "on") { await next(ctx); return; }
+            var path = ctx.Request.Path;
+            if (path.StartsWithSegments("/api/login") || path.StartsWithSegments("/api/logout")
+                || path.StartsWithSegments("/api/auth") || path.StartsWithSegments("/api/ingest")
+                || path.Equals("/login", StringComparison.OrdinalIgnoreCase)
+                || path.Equals("/favicon.ico", StringComparison.OrdinalIgnoreCase))
+            { await next(ctx); return; }
+
+            if (auth.ValidSession(ctx.Request.Cookies["michka_sid"])) { await next(ctx); return; }
+
+            if (path.StartsWithSegments("/api"))
+            {
+                ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                await ctx.Response.WriteAsJsonAsync(new { error = "pin_required" });
+            }
+            else
+            {
+                ctx.Response.Redirect("/login");
+            }
+        });
+
         // Serve the dashboard from resources embedded in the binary (true single-file deploy).
         var fileProvider = new ManifestEmbeddedFileProvider(typeof(HubHost).Assembly, "wwwroot");
         app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = fileProvider });
         app.UseStaticFiles(new StaticFileOptions { FileProvider = fileProvider });
 
         app.MapApi();
+        // The PIN keypad login page (self-contained). Reachable even when the gate is on (it is how you
+        // get past it); when the gate is off it simply bounces back to the dashboard.
+        app.MapGet("/login", () => Results.Stream(
+            fileProvider.GetFileInfo("login.html").CreateReadStream(), "text/html"));
         app.MapFallback(() => Results.Stream(
             fileProvider.GetFileInfo("index.html").CreateReadStream(), "text/html"));
 
         var log = app.Services.GetRequiredService<ILogger<object>>();
         log.LogInformation("michka hub listening on http://0.0.0.0:{Port}  (db: {Db})", port, opt.DbPath);
+        log.LogInformation("agent push token (set 'token' in each agent's michka_c.conf): {Token}  [required: {Req}]",
+            config.Token, config.TokenRequired);
 
         await app.RunAsync();
         return 0;
@@ -103,12 +144,16 @@ internal sealed class HubBackgroundService : BackgroundService
     private readonly IServiceInspector _services;
     private readonly ILogger<HubBackgroundService> _log;
 
-    private static readonly long RetentionMs = 24 * 60 * 60 * 1000; // 24h
+    private static readonly long RetentionMs = 7L * 24 * 60 * 60 * 1000; // 7 days (host reports span up to a week)
 
     // Service status is polled less often than metrics (spawning systemctl every tick is wasteful).
     private List<Monitor.Services.ServiceState> _svcCache = new();
     private long _svcAtMs;
     private const long SvcPollMs = 2500;
+
+    // Docker containers for the hub's own host, attached on the same ~10s cadence as the catalog.
+    private readonly Monitor.Services.DockerInspector _docker = new();
+    private long _dockerAtMs = -CatalogIntervalMs;
 
     public HubBackgroundService(Options opt, LiveBroadcaster broadcaster, MetricsStore store,
         HubRuntime runtime, IServiceInspector services, ILogger<HubBackgroundService> log)
@@ -149,6 +194,11 @@ internal sealed class HubBackgroundService : BackgroundService
                 {
                     try { snap.ServiceCatalog = _services.List().ToList(); _catalogAtMs = nowMs; }
                     catch (Exception ex) { _log.LogWarning(ex, "service catalog failed"); }
+                }
+                if (_docker.Available && nowMs - _dockerAtMs >= CatalogIntervalMs)
+                {
+                    try { snap.Containers = _docker.List().ToList(); _dockerAtMs = nowMs; }
+                    catch (Exception ex) { _log.LogWarning(ex, "docker list failed"); }
                 }
 
                 _broadcaster.Publish(snap);

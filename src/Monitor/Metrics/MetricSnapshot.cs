@@ -46,6 +46,16 @@ public sealed class MetricSnapshot
     /// the snapshot before persisting/broadcasting. Null on the ticks that don't carry it.
     /// </summary>
     public List<Monitor.Services.ServiceUnit>? ServiceCatalog { get; set; }
+
+    /// <summary>
+    /// Docker containers on this host (name, image, state, and live CPU/memory/network), for the
+    /// optional Docker widget. Attached sparsely (every ~10s, like <see cref="ServiceCatalog"/>) since
+    /// `docker stats` is heavier than a metrics sample; the hub caches the last reported list per host
+    /// (including an empty list, which means "Docker present, no containers") and strips it from the
+    /// snapshot before persisting/broadcasting. Null on ticks that don't carry it, and on hosts with
+    /// no Docker.
+    /// </summary>
+    public List<Monitor.Services.DockerContainer>? Containers { get; set; }
 }
 
 public sealed class CpuInfo

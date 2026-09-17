@@ -18,7 +18,13 @@ public sealed class LiveBroadcaster
     private readonly HubRuntime _runtime;
     private readonly ConcurrentDictionary<string, MetricSnapshot> _latest = new();
     private readonly ConcurrentDictionary<string, List<ServiceUnit>> _catalogs = new();
+    private readonly ConcurrentDictionary<string, List<DockerContainer>> _dockers = new();
+    private readonly ConcurrentDictionary<string, long> _diskAt = new();   // host -> last disk-sample ts
     private readonly ConcurrentDictionary<Guid, Channel<string>> _subscribers = new();
+
+    // Disk free/total space is logged at most this often per host (slow-moving; the first push for a
+    // host writes immediately so a report has at least one point right away).
+    private const long DiskLogMs = 5 * 60 * 1000;
 
     public LiveBroadcaster(MetricsStore store, HubRuntime runtime)
     {
@@ -32,6 +38,10 @@ public sealed class LiveBroadcaster
     /// the host hasn't pushed one yet.</summary>
     public List<ServiceUnit>? Catalog(string host) => _catalogs.GetValueOrDefault(host);
 
+    /// <summary>The last Docker container list a host reported (for the Docker widget). Null if the
+    /// host hasn't reported one (no Docker, or not yet); an empty list means Docker with no containers.</summary>
+    public List<DockerContainer>? Containers(string host) => _dockers.GetValueOrDefault(host);
+
     /// <summary>Accept a snapshot: stamp host/ts if missing, persist, cache, broadcast.</summary>
     public void Publish(MetricSnapshot snap)
     {
@@ -44,6 +54,13 @@ public sealed class LiveBroadcaster
             _catalogs[snap.Host] = cat;
         snap.ServiceCatalog = null;
 
+        // Docker rides in the same way. Cache it whenever present (even an empty list, which is the
+        // meaningful "Docker running, no containers" state) and strip it so the list never bloats
+        // SQLite history or the SSE stream.
+        if (snap.Containers is { } docks)
+            _dockers[snap.Host] = docks;
+        snap.Containers = null;
+
         // For agent hosts (no detailed status of their own), synthesise up/down service status for the
         // host's monitored set from its cached catalog, so service boxes/bubbles light up the same way
         // the hub's own host does. The hub fills its own Services with full detail before publishing.
@@ -54,6 +71,17 @@ public sealed class LiveBroadcaster
 
         _latest[snap.Host] = snap;
         try { _store.Insert(snap, json); } catch { /* never let storage errors break the live feed */ }
+
+        // Throttled disk-space history (one row per mount per ~5 min) for the report's free-space trend.
+        if (snap.Disks.Count > 0)
+        {
+            long last = _diskAt.GetValueOrDefault(snap.Host, 0);
+            if (snap.TsUnixMs - last >= DiskLogMs)
+            {
+                _diskAt[snap.Host] = snap.TsUnixMs;
+                try { _store.InsertDisks(snap.Host, snap.TsUnixMs, snap.Disks); } catch { /* storage best-effort */ }
+            }
+        }
 
         foreach (var ch in _subscribers.Values)
             ch.Writer.TryWrite(json); // bounded+drop: a slow client must not stall others
@@ -92,6 +120,8 @@ public sealed class LiveBroadcaster
     public bool Forget(string host)
     {
         _catalogs.TryRemove(host, out _);
+        _dockers.TryRemove(host, out _);
+        _diskAt.TryRemove(host, out _);
         return _latest.TryRemove(host, out _);
     }
 

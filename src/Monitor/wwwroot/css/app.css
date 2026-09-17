@@ -79,7 +79,11 @@ html, body {
 .pull-tab:active { color: var(--text); }
 
 /* ---------- freeform board (draggable boxes) ---------- */
-.board { flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden; }
+.board { flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden; transition: opacity .15s ease; }
+/* On first load the board is hidden until the persisted UI template has been applied, so a
+   board-replacing template (e.g. LAZY) never flashes the default boxes before it kicks in.
+   revealBoard() (app.js) clears this once the template's CSS is live; a hard timeout is the net. */
+body.booting .board { opacity: 0; }
 .board .box {
   position: absolute; margin: 0;
   touch-action: none; cursor: grab;
@@ -128,6 +132,16 @@ html, body {
 }
 
 .status { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+/* Top-right icon button (report). Touch-friendly hit target; flat, theme-tokened. */
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: calc(40px * var(--ui-scale)); height: calc(40px * var(--ui-scale));
+  padding: 0; border: 1px solid var(--card-brd); border-radius: 11px;
+  background: var(--card); color: var(--muted); cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+.icon-btn:hover, .icon-btn:active { color: var(--text); border-color: rgba(111, 140, 255, 0.7); background: rgba(111, 140, 255, 0.14); }
+.icon-btn svg { width: calc(22px * var(--ui-scale)); height: calc(22px * var(--ui-scale)); }
 .conn-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); box-shadow: 0 0 8px var(--red); }
 .conn-dot.on { background: var(--green); box-shadow: 0 0 10px var(--green); }
 .clock { font-variant-numeric: tabular-nums; font-size: calc(15px * var(--ui-scale)); color: var(--muted); letter-spacing: 1px; }
@@ -191,11 +205,13 @@ html, body {
 .bar span { font-size: 11px; color: var(--text); font-variant-numeric: tabular-nums; min-width: 64px; text-align: right; }
 
 /* Disks */
-.disks { display: flex; flex-direction: column; gap: 9px; width: 100%; overflow: hidden; }
+.disks { display: flex; flex-direction: column; gap: 9px; width: 100%; overflow: hidden; cursor: pointer; }
 .disk { display: flex; flex-direction: column; gap: 4px; }
-.disk .top { display: flex; justify-content: space-between; font-size: 11px; }
-.disk .top .mnt { color: var(--text); font-weight: 600; }
-.disk .top .cap { color: var(--muted); font-variant-numeric: tabular-nums; }
+.disk .top { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; min-width: 0; }
+/* Names truncate to one line (full path on tap → popup / hover title) — a long mount like
+   "/var/lib/michka-bundle" must never wrap and overlap the bar / neighbouring rows. */
+.disk .top .mnt { color: var(--text); font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.disk .top .cap { color: var(--muted); font-variant-numeric: tabular-nums; flex: 0 0 auto; white-space: nowrap; }
 .disk .track { height: 9px; border-radius: 5px; background: rgba(255,255,255,0.07); overflow: hidden; }
 .disk .fill { height: 100%; width: 0; border-radius: 5px; background: var(--cyan); transition: width .4s ease; }
 .disk .fill.warn { background: var(--orange); }
@@ -288,6 +304,23 @@ input.num {
   font-size: 14px; font-variant-numeric: tabular-nums; text-align: right;
 }
 input.num:focus { outline: none; border-color: var(--blue); }
+/* Agent-token field: wider, left-aligned monospace so the short token reads clearly. */
+input.token-input { width: 132px; text-align: left; font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: 2px; }
+#tokenRow.dim { opacity: .5; }
+#pinControls { gap: 8px; flex-wrap: wrap; }
+
+/* PIN set/change keypad popup (Settings) */
+.pin-overlay { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; }
+.pin-card { background: #161a22; border: 1px solid var(--card-brd); border-radius: 16px; padding: 22px; width: 290px; text-align: center; }
+.pin-title { font-size: 15px; color: var(--text); margin-bottom: 14px; }
+.pin-dots { display: flex; gap: 12px; justify-content: center; margin-bottom: 16px; }
+.pin-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--card-brd); }
+.pin-dot.on { background: var(--blue); border-color: var(--blue); }
+.pin-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.pin-key { height: 54px; border: 1px solid var(--card-brd); border-radius: 12px; background: rgba(255,255,255,0.04); color: var(--text); font-size: 22px; font-weight: 600; cursor: pointer; }
+.pin-key:active { transform: scale(.95); }
+.pin-key.blank { background: transparent; border-color: transparent; cursor: default; }
+.pin-cancel { margin-top: 14px; background: transparent; border: none; color: var(--muted); font-size: 14px; cursor: pointer; }
 .lang-select {
   min-height: 40px; padding: 0 12px; min-width: 160px;
   border: 1px solid var(--card-brd); border-radius: 9px;
@@ -438,7 +471,9 @@ input[type="range"]::-moz-range-thumb {
   border: 1px solid var(--card-brd); background: var(--card); color: var(--text); cursor: pointer;
 }
 .osk-close:active { background: var(--blue); border-color: var(--blue); color: #fff; }
-.osk-row { display: flex; gap: 6px; justify-content: center; }
+/* Bound each row + centre it so the keyboard doesn't stretch absurdly wide on a desktop browser
+   driving the hub (the SPACE/Clear/Done row has no per-key max-width). ~full width on the 1280 panel. */
+.osk-row { display: flex; gap: 6px; justify-content: center; max-width: 1100px; width: 100%; margin: 0 auto; }
 /* numeric keypad: centred 3-wide grid rather than full-width rows */
 .osk.osk-numeric .osk-row { max-width: 360px; margin: 0 auto; width: 100%; }
 .osk-key.num { flex: 1 1 0; max-width: none; min-height: 54px; font-size: 22px; }
@@ -495,9 +530,12 @@ input[type="range"]::-moz-range-thumb {
   width: clamp(320px, 92vw, 660px); max-width: 660px;
   padding: 0; gap: 0; overflow: hidden;
 }
+/* The widget chooser is wider so it can list widgets two-up on the big horizontal panel; the disk
+   popup keeps the narrower 660px width. */
+#widgetChooser.popup.store { width: clamp(320px, 94vw, 1000px); max-width: 1000px; }
 .store .store-head {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 14px 16px; border-bottom: 1px solid var(--card-brd);
+  padding: 18px 20px; border-bottom: 1px solid var(--card-brd);
 }
 .store .store-title { font-size: 16px; font-weight: 700; letter-spacing: 0.3px; color: var(--text); }
 .store .store-close {
@@ -507,14 +545,19 @@ input[type="range"]::-moz-range-thumb {
   color: var(--text); cursor: pointer;
 }
 .store .store-close:active { background: rgba(255,255,255,0.14); }
+/* Two columns on the wide panel: cards flow left-to-right, top-to-bottom, so an odd last card sits
+   alone in the left column. Grid auto-rows are content-sized, so tall cards don't clip — the list
+   just scrolls past max-height. */
 .store .chooser-list {
   max-height: min(72vh, 430px); overflow-y: auto;
-  display: flex; flex-direction: column; gap: 10px;
-  padding: 14px; -webkit-overflow-scrolling: touch;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;
+  padding: 18px; -webkit-overflow-scrolling: touch;
 }
+/* Narrow viewports (e.g. a small desktop browser window) fall back to a single column. */
+@media (max-width: 760px) { .store .chooser-list { grid-template-columns: 1fr; } }
 .store .chooser-list .ch-item {
-  display: flex; align-items: center; gap: 14px;
-  min-height: 70px; padding: 12px 14px; width: 100%;
+  display: flex; align-items: center; gap: 18px;
+  min-height: 84px; padding: 20px; width: 100%;
   border: 1px solid var(--card-brd); border-radius: 14px;
   background: rgba(255,255,255,0.03); color: var(--text);
   font-size: 15px; font-weight: 600; text-align: left; cursor: pointer;
@@ -523,21 +566,23 @@ input[type="range"]::-moz-range-thumb {
 .store .ch-icon {
   width: 52px; height: 52px; flex: 0 0 auto; border-radius: 14px;
   background: rgba(255,255,255,0.06); padding: 9px; object-fit: contain;
+  /* The icons are <img src=icon.svg> (often dark), so force them white for contrast on the dark tile. */
+  filter: brightness(0) invert(1);
 }
 .store .ch-iconph {
   width: 52px; height: 52px; flex: 0 0 auto; border-radius: 14px;
-  background: rgba(255,255,255,0.06); color: var(--muted);
+  background: rgba(255,255,255,0.06); color: var(--text);
   display: flex; align-items: center; justify-content: center;
 }
-.store .ch-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; }
-.store .ch-name { font-size: 15px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.store .ch-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1 1 auto; }
+.store .ch-name { font-size: 16px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Show the full description (the list scrolls, so no need to clamp it to 2 lines). */
 .store .ch-text small {
-  display: block; margin-top: 0; font-size: 12px; font-weight: 400; color: var(--muted); line-height: 1.35;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  display: block; margin-top: 0; font-size: 12.5px; font-weight: 400; color: var(--muted); line-height: 1.4;
 }
 .store .ch-text .ch-tag {
-  margin: 3px 0 0; align-self: flex-start; font-size: 9px; letter-spacing: 0.8px; text-transform: uppercase;
-  color: var(--muted); border: 1px solid var(--card-brd); border-radius: 999px; padding: 2px 8px;
+  margin: 6px 0 0; align-self: flex-start; font-size: 9px; letter-spacing: 0.8px; text-transform: uppercase;
+  color: var(--muted); border: 1px solid var(--card-brd); border-radius: 999px; padding: 3px 9px;
 }
 .store .ch-add {
   flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px;
@@ -546,6 +591,22 @@ input[type="range"]::-moz-range-thumb {
   font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;
 }
 .store .chooser-list .ch-empty { padding: 30px 18px; font-size: 14px; }
+
+/* Disks popup — the full, untruncated mount list (tap the Disks box to open). Reuses .popup.store
+   chrome (centred modal + head). Full names wrap freely here; the list scrolls if it overflows. */
+.disk-popup-list {
+  max-height: min(72vh, 430px); overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 16px; -webkit-overflow-scrolling: touch;
+}
+.disk-popup-list .dp-row { display: flex; flex-direction: column; gap: 6px; }
+.disk-popup-list .dp-top { display: flex; justify-content: space-between; gap: 14px; font-size: 14px; align-items: baseline; }
+.disk-popup-list .dp-mnt { color: var(--text); font-weight: 700; word-break: break-all; min-width: 0; }
+.disk-popup-list .dp-cap { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; flex: 0 0 auto; }
+.disk-popup-list .dp-track { height: 12px; border-radius: 999px; background: var(--f-track, rgba(255,255,255,0.07)); overflow: hidden; }
+.disk-popup-list .dp-fill { height: 100%; width: 0; border-radius: 999px; background: var(--cyan); transition: width .4s ease; }
+.disk-popup-list .dp-fill.warn { background: var(--orange); }
+.disk-popup-list .dp-empty { color: var(--muted); text-align: center; padding: 24px; font-size: 14px; }
 
 /* ---------- vertical pages: Service status (swipe up) + Widgets (swipe down) ----------
    Full-screen overlays that slide in over the dashboard from the bottom / top. */
@@ -625,8 +686,8 @@ input[type="range"]::-moz-range-thumb {
 .widgets-empty-add:active { background: rgba(79,140,255,0.22); }
 
 /* ============================================================================
-   DEFAULT THEME — folded in from the former "Futura" template (2026-06-26).
-   The default look is now a slate sensor-panel skin: flat dark board, big
+   DEFAULT THEME (slate sensor-panel skin).
+   The default look is a slate sensor-panel skin: flat dark board, big
    top-left date+time clock (built by app.js's buildTopClock), centred uppercase
    headers with white-square caps, fat pill bars, flat solid fills, and Pac-Man /
    skull host-status glyphs. This block is appended after the base rules above so
@@ -671,7 +732,7 @@ html, body {
 
 /* ---------------------------- top bar / clock ---------------------------- */
 /* Hide the wordmark + the small status clock; app.js's buildTopClock adds a big
-   clock that sits where the brand used to be (top-left). Also hide the SSE
+   clock at the top-left. Also hide the SSE
    stream-connection dot (#connDot): host reachability is already shown per host
    tab (Pac-Man / skull), so the extra top-right dot just reads as a duplicate. */
 .screen-dash .brand { display: none; }
@@ -768,6 +829,13 @@ html, body {
 .card-head .metric-big { display: none; }
 /* Disks' "N mounts" tag sits top-right (short enough not to clash with the title). */
 .card-head .metric-sub { position: absolute; right: 0; top: 0; }
+/* "Thermals/Load" is the longest header; trim it 10% (14->12.6px) and tighten the square caps so the
+   trailing white square never wraps to a second line. In base CSS so every template that uses the
+   default header (Default, Futura) inherits it; Marty hides the caps + uses a smaller header already,
+   LAZY has no boxes. */
+.box-temp .card-head h2 { font-size: calc(12.6px * var(--ui-scale, 1)); }
+.box-temp .card-head h2::before { margin-right: 8px; }
+.box-temp .card-head h2::after { margin-left: 8px; }
 /* ------------------------------- network box ----------------------------- */
 /* Keep the :: NET :: title in the header, with the up/down speed readout on its
    own centred line directly beneath it (the rx/tx arrows + #netRx/#netTx values

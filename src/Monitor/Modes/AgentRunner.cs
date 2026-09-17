@@ -15,7 +15,7 @@ namespace Monitor.Modes;
 public static class AgentRunner
 {
     /// <summary>The effective settings after merging <c>michka_c.conf</c> with command-line overrides.</summary>
-    public readonly record struct Resolved(string? HubUrl, string? Name, int IntervalMs);
+    public readonly record struct Resolved(string? HubUrl, string? Name, int IntervalMs, string? Token);
 
     /// <summary>CLI flags win over the conf file; the conf file fills in anything not passed.</summary>
     public static Resolved Resolve(Options opt, AgentConfig cfg)
@@ -26,9 +26,12 @@ public static class AgentRunner
         var name = !string.IsNullOrWhiteSpace(opt.Name) ? opt.Name
                  : !string.IsNullOrWhiteSpace(cfg.Name) ? cfg.Name
                  : null;
+        var token = !string.IsNullOrWhiteSpace(opt.Token) ? opt.Token
+                  : !string.IsNullOrWhiteSpace(cfg.Token) ? cfg.Token
+                  : null;
         var interval = opt.IntervalSpecified ? opt.IntervalMs : cfg.IntervalMs;
         if (interval < 200) interval = 200;
-        return new Resolved(hub, name, interval);
+        return new Resolved(hub, name, interval, token);
     }
 
     /// <summary>Console entry point: resolve settings from conf + CLI, then run until Ctrl+C.</summary>
@@ -46,7 +49,7 @@ public static class AgentRunner
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
-        try { await RunLoopAsync(r.HubUrl!, r.Name, r.IntervalMs, Console.WriteLine, cts.Token); }
+        try { await RunLoopAsync(r.HubUrl!, r.Name, r.IntervalMs, Console.WriteLine, cts.Token, r.Token); }
         catch (OperationCanceledException) { /* Ctrl+C */ }
 
         Console.WriteLine("agent stopped");
@@ -58,14 +61,17 @@ public static class AgentRunner
     /// <paramref name="intervalMs"/>. Status/error lines go to <paramref name="log"/>. Runs until the
     /// token is cancelled. Shared by the console agent, the GUI's Start button, and the service.
     /// </summary>
-    public static async Task RunLoopAsync(string hubUrl, string? name, int intervalMs, Action<string> log, CancellationToken ct)
+    public static async Task RunLoopAsync(string hubUrl, string? name, int intervalMs, Action<string> log, CancellationToken ct, string? token = null)
     {
         var hub = hubUrl.TrimEnd('/');
         var ingestUrl = $"{hub}/api/ingest";
         var collector = MetricsCollectorFactory.Create(name);
         var services = ServiceInspectorFactory.Create();
+        var docker = new DockerInspector();
 
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        if (!string.IsNullOrWhiteSpace(token))
+            http.DefaultRequestHeaders.Add(Monitor.Api.Security.TokenHeader, token);
 
         log($"Monitor agent '{collector.HostName}' -> {ingestUrl} every {intervalMs}ms");
 
@@ -80,6 +86,10 @@ public static class AgentRunner
         const long catalogIntervalMs = 10_000;
         long lastCatalogMs = -catalogIntervalMs;
 
+        // Docker containers ride along on the same sparse cadence (`docker stats` is heavy). Probed once.
+        const long dockerIntervalMs = 10_000;
+        long lastDockerMs = -dockerIntervalMs;
+
         while (await timer.WaitForNextTickAsync(ct))
         {
             MetricSnapshot snap;
@@ -92,11 +102,18 @@ public static class AgentRunner
                 try { snap.ServiceCatalog = services.List().ToList(); lastCatalogMs = nowMs; }
                 catch (Exception ex) { log($"service catalog failed: {ex.Message}"); }
             }
+            if (docker.Available && nowMs - lastDockerMs >= dockerIntervalMs)
+            {
+                try { snap.Containers = docker.List().ToList(); lastDockerMs = nowMs; }
+                catch (Exception ex) { log($"docker list failed: {ex.Message}"); }
+            }
 
             try
             {
                 using var resp = await http.PostAsJsonAsync(ingestUrl, snap, MetricsJson.Options, ct);
-                if (!resp.IsSuccessStatusCode)
+                if (resp.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                    log("hub rejected the push (401): set 'token' in michka_c.conf to match the hub's michka.conf");
+                else if (!resp.IsSuccessStatusCode)
                     log($"hub returned {(int)resp.StatusCode}");
                 else if (wasDown)
                 {

@@ -16,9 +16,28 @@ public static class Endpoints
 
     public static void MapApi(this WebApplication app)
     {
-        // Agent / remote snapshot ingestion.
-        app.MapPost("/api/ingest", async (HttpContext ctx, LiveBroadcaster bc) =>
+        // Agent / remote snapshot ingestion. When token auth is enabled (the default) the shared token
+        // is mandatory so a random host on the network can't spoof metrics or poison the history/host
+        // list; repeated wrong tokens from one source are rate-limited so the short token can't be
+        // brute forced. The token requirement can be turned off in Settings for a fully trusted LAN.
+        app.MapPost("/api/ingest", async (HttpContext ctx, LiveBroadcaster bc, HubRuntime rt, AuthState auth) =>
         {
+            if (rt.Config.TokenRequired != "off")
+            {
+                var key = "ingest:" + Security.ClientIp(ctx);
+                if (auth.IsLocked(key, out var retry))
+                {
+                    ctx.Response.Headers.RetryAfter = retry.ToString();
+                    return Results.Json(new { error = "rate_limited" }, statusCode: StatusCodes.Status429TooManyRequests);
+                }
+                if (!Security.HasValidToken(ctx, rt.Config.Token))
+                {
+                    auth.RecordFailure(key);
+                    return Results.Json(new { error = "unauthorized" }, statusCode: StatusCodes.Status401Unauthorized);
+                }
+                auth.RecordSuccess(key);
+            }
+
             MetricSnapshot? snap;
             try
             {
@@ -63,6 +82,8 @@ public static class Endpoints
         // host pushes again it simply reappears.
         app.MapPost("/api/hosts/delete", async (HttpContext ctx, LiveBroadcaster bc, MetricsStore store, HubRuntime rt) =>
         {
+            if (Security.RequireBrowserOrToken(ctx, rt.Config.Token) is { } deny) return deny;
+
             HostDelete? body;
             try { body = await JsonSerializer.DeserializeAsync<HostDelete>(ctx.Request.Body, MetricsJson.Options); }
             catch (JsonException) { return Results.BadRequest(new { error = "invalid json" }); }
@@ -86,6 +107,15 @@ public static class Endpoints
             return Results.Json(points, MetricsJson.Options);
         });
 
+        // Self-contained HTML report for one host (7-day overview charts). Opened in a new browser tab
+        // by the dashboard's report button; the page inlines ECharts + data so it saves/views offline.
+        app.MapGet("/api/report", (string host, HubRuntime rt, MetricsStore store) =>
+        {
+            if (string.IsNullOrWhiteSpace(host)) return Results.BadRequest(new { error = "host is required" });
+            var html = ReportPage.Build(host, store, rt.Config.Lang ?? "en", rt.Config.DateFmt ?? "us");
+            return Results.Content(html, "text/html; charset=utf-8");
+        });
+
         // Current settings for the Settings page.
         app.MapGet("/api/server-config", (HubRuntime rt) => Results.Json(new
         {
@@ -94,6 +124,8 @@ public static class Endpoints
             version = rt.Version,
             db = rt.DbPath,
             template = rt.Config.Template,
+            tokenRequired = rt.Config.TokenRequired,
+            pinEnabled = rt.Config.PinEnabled,
             platform = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
             display = new
             {
@@ -112,7 +144,64 @@ public static class Endpoints
             servicesByHost = rt.Config.ServicesByHost,
             layout = rt.Config.Layout,
             layouts = rt.Config.Layouts,
+            widgetsByHost = rt.Config.WidgetsByHost,
+            widgetConfig = rt.Config.WidgetConfig,
         }, MetricsJson.Options));
+
+        // ---- optional UI PIN gate (login / logout / status) ------------------------------------
+        // These three are always reachable (even when the PIN gate is on, they are how you get past it).
+
+        // Probe the auth state: whether a PIN is required and whether this browser is already in.
+        app.MapGet("/api/auth", (HttpContext ctx, HubRuntime rt, AuthState auth) =>
+        {
+            bool on = rt.Config.PinEnabled == "on";
+            bool authed = !on || auth.ValidSession(ctx.Request.Cookies["michka_sid"]);
+            return Results.Json(new { pinEnabled = on, authenticated = authed });
+        });
+
+        // Submit the PIN from the keypad login page. Rate-limited per IP (shared limiter): a few wrong
+        // PINs lock the source out for an escalating cool-down, so a 6-digit PIN can't be brute forced.
+        app.MapPost("/api/login", async (HttpContext ctx, HubRuntime rt, AuthState auth) =>
+        {
+            if (rt.Config.PinEnabled != "on") return Results.Json(new { ok = true }); // nothing to log into
+            var key = "pin:" + Security.ClientIp(ctx);
+            if (auth.IsLocked(key, out var retry))
+            {
+                ctx.Response.Headers.RetryAfter = retry.ToString();
+                return Results.Json(new { error = "rate_limited", retryAfter = retry }, statusCode: StatusCodes.Status429TooManyRequests);
+            }
+            LoginBody? body;
+            try { body = await JsonSerializer.DeserializeAsync<LoginBody>(ctx.Request.Body, MetricsJson.Options); }
+            catch (JsonException) { return Results.BadRequest(new { error = "invalid json" }); }
+
+            if (body?.Pin is not { Length: > 0 } pin || !Security.VerifyPin(pin, rt.Config.PinHash))
+            {
+                auth.RecordFailure(key);
+                return Results.Json(new { error = "bad_pin" }, statusCode: StatusCodes.Status401Unauthorized);
+            }
+            auth.RecordSuccess(key);
+            IssueSession(ctx, auth);
+            return Results.Json(new { ok = true });
+        });
+
+        // Lock the dashboard again (clear this browser's session).
+        app.MapPost("/api/logout", (HttpContext ctx, AuthState auth) =>
+        {
+            auth.EndSession(ctx.Request.Cookies["michka_sid"]);
+            ctx.Response.Cookies.Delete("michka_sid");
+            return Results.Json(new { ok = true });
+        });
+
+        // Reveal the agent token for the Settings page so the user can copy it into agents. Guarded the
+        // same way as the admin endpoints: a genuine same-origin browser request OR the token itself.
+        // It is intentionally NOT returned by /api/server-config (which any GET can read); this is the
+        // single, deliberately gated way to read the secret. (Once the optional UI PIN is enabled, the
+        // PIN session is also required, since this endpoint is not on the PIN allow-list.)
+        app.MapGet("/api/token", (HttpContext ctx, HubRuntime rt) =>
+        {
+            if (Security.RequireBrowserOrToken(ctx, rt.Config.Token) is { } deny) return deny;
+            return Results.Json(new { token = rt.Config.Token, required = rt.Config.TokenRequired });
+        });
 
         // Searchable list of a host's services/daemons (for the monitor-select page). With no host (or
         // the hub's own host) it uses the in-process inspector for freshness; for an agent host it
@@ -133,6 +222,16 @@ public static class Endpoints
             var key = string.IsNullOrWhiteSpace(host) ? rt.HostName : host;
             var gpus = bc.Latest.TryGetValue(key, out var snap) ? snap.Gpus : new List<Monitor.Metrics.GpuInfo>();
             return Results.Json(new { host = key, available = gpus.Count > 0, gpus }, MetricsJson.Options);
+        });
+
+        // Docker containers for a host, from the list it last reported (cached + stripped from the
+        // snapshot like the service catalog). Feeds the optional Docker widget. available=false when the
+        // host has never reported Docker (no Docker, or not yet); an empty list = Docker, no containers.
+        app.MapGet("/api/docker", (string? host, LiveBroadcaster bc, HubRuntime rt) =>
+        {
+            var key = string.IsNullOrWhiteSpace(host) ? rt.HostName : host;
+            var list = bc.Containers(key);
+            return Results.Json(new { host = key, available = list is not null, containers = list ?? new() }, MetricsJson.Options);
         });
 
         // Custom UI templates discovered on disk (for the Settings template selector).
@@ -185,10 +284,28 @@ public static class Endpoints
             return Results.Json(new { servers }, MetricsJson.Options);
         });
 
+        // Reachability probe for the Uptime widget. Browsers can't do raw/cross-origin pings, so the
+        // hub checks one user-supplied URL and reports up/down + latency.
+        app.MapGet("/api/widget/uptime", async (string? url, CancellationToken ct) =>
+        {
+            var r = await UptimeChecker.CheckAsync(url ?? "", ct);
+            return Results.Json(new { ok = r.Ok, status = r.Status, ms = r.Ms, error = r.Error }, MetricsJson.Options);
+        });
+
+        // Pi-hole summary proxy (Pi-hole's API isn't CORS-enabled, so the hub fetches it). The Pi-hole
+        // base URL + password come from the browser's localStorage on the query string.
+        app.MapGet("/api/widget/pihole", async (string? @base, string? key, CancellationToken ct) =>
+        {
+            var data = await PiholeClient.SummaryAsync(@base ?? "", key ?? "", ct);
+            return Results.Json(data, MetricsJson.Options);
+        });
+
         // Update settings (persisted to michka.conf). A port change restarts the hub + kiosk;
         // display changes just persist on the device.
-        app.MapPost("/api/server-config", async (HttpContext ctx, HubRuntime rt, ILoggerFactory lf) =>
+        app.MapPost("/api/server-config", async (HttpContext ctx, HubRuntime rt, AuthState auth, ILoggerFactory lf) =>
         {
+            if (Security.RequireBrowserOrToken(ctx, rt.Config.Token) is { } deny) return deny;
+
             ServerConfigUpdate? body;
             try { body = await JsonSerializer.DeserializeAsync<ServerConfigUpdate>(ctx.Request.Body, MetricsJson.Options); }
             catch (JsonException) { return Results.BadRequest(new { error = "invalid json" }); }
@@ -199,6 +316,32 @@ public static class Endpoints
             {
                 if (p < 1 || p > 65535) return Results.BadRequest(new { error = "port must be 1..65535" });
                 if (p != rt.Port) { rt.Config.Port = p; restart = true; changed = true; }
+            }
+            if (body.TokenRequired is { } tr) { rt.Config.TokenRequired = tr == "off" ? "off" : "on"; changed = true; }
+            if (body.RegenToken == true) { rt.Config.Token = Security.NewShortToken(); changed = true; }
+            // UI PIN: enabling requires a fresh 6-digit PIN (hashed); disabling clears it. Changing the
+            // PIN while enabled re-hashes. Enabling/changing keeps the CURRENT browser logged in (issues
+            // a session) so the admin never locks themselves out; disabling drops every session.
+            if (body.PinEnabled is { } pe)
+            {
+                if (pe == "on")
+                {
+                    var pin = body.Pin ?? "";
+                    if (pin.Length != 6 || !pin.All(char.IsDigit))
+                        return Results.BadRequest(new { error = "pin must be 6 digits" });
+                    rt.Config.PinHash = Security.HashPin(pin);
+                    rt.Config.PinEnabled = "on";
+                    auth.ClearSessions();           // invalidate any old sessions on a PIN change
+                    IssueSession(ctx, auth);        // keep this browser in
+                    changed = true;
+                }
+                else
+                {
+                    rt.Config.PinEnabled = "off";
+                    rt.Config.PinHash = "";
+                    auth.ClearSessions();
+                    changed = true;
+                }
             }
             if (body.Template is { } tpl) { rt.Config.Template = tpl; changed = true; }
             if (body.Lang is { } lng) { rt.Config.Lang = lng; changed = true; }
@@ -229,6 +372,19 @@ public static class Endpoints
                 else rt.Config.Layout = lay;
                 changed = true;
             }
+            // Widgets-page placements for a host (the ordered widget type list).
+            if (body.Widgets is { } wlist && body.WidgetsHost is { Length: > 0 } whost)
+            {
+                rt.Config.WidgetsByHost[whost] = wlist;
+                changed = true;
+            }
+            // Per-widget-type config blobs — merged per type so an update to one widget doesn't clobber
+            // others (and concurrent browsers don't stomp each other's unrelated widgets).
+            if (body.WidgetConfig is { } wcfg)
+            {
+                foreach (var kv in wcfg) rt.Config.WidgetConfig[kv.Key] = kv.Value;
+                changed = true;
+            }
 
             if (changed)
             {
@@ -241,8 +397,10 @@ public static class Endpoints
         });
 
         // Exit the on-screen UI and return tty1 to the Linux login prompt.
-        app.MapPost("/api/system/exit-ui", (ILoggerFactory lf) =>
+        app.MapPost("/api/system/exit-ui", (HttpContext ctx, HubRuntime rt, ILoggerFactory lf) =>
         {
+            if (Security.RequireBrowserOrToken(ctx, rt.Config.Token) is { } deny) return deny;
+
             bool ok = SystemControl.ExitUiToLogin(lf.CreateLogger("system"));
             return ok
                 ? Results.Json(new { ok = true })
@@ -250,8 +408,10 @@ public static class Endpoints
         });
 
         // Screensaver "sleep" mode: power the kiosk panel off/on (best-effort, Linux/wlroots only).
-        app.MapPost("/api/system/screen", async (HttpContext ctx, ILoggerFactory lf) =>
+        app.MapPost("/api/system/screen", async (HttpContext ctx, HubRuntime rt, ILoggerFactory lf) =>
         {
+            if (Security.RequireBrowserOrToken(ctx, rt.Config.Token) is { } deny) return deny;
+
             ScreenPower? body;
             try { body = await JsonSerializer.DeserializeAsync<ScreenPower>(ctx.Request.Body, MetricsJson.Options); }
             catch (JsonException) { return Results.BadRequest(new { error = "invalid json" }); }
@@ -286,6 +446,20 @@ public static class Endpoints
         });
     }
 
+    /// <summary>Open a PIN session and set its httpOnly, session-scoped cookie (no Max-Age, so it ends
+    /// when the browser closes). SameSite=Strict; Secure left off since the hub is plain HTTP on the LAN.</summary>
+    private static void IssueSession(HttpContext ctx, AuthState auth)
+    {
+        var sid = auth.NewSession();
+        ctx.Response.Cookies.Append("michka_sid", sid, new CookieOptions
+        {
+            HttpOnly = true,
+            SameSite = SameSiteMode.Strict,
+            Secure = false,
+            Path = "/",
+        });
+    }
+
     private static async Task WriteEvent(HttpContext ctx, string json, CancellationToken ct)
     {
         // SSE framing: "data: <payload>\n\n"
@@ -298,6 +472,10 @@ public static class Endpoints
     private sealed class ServerConfigUpdate
     {
         public int? Port { get; set; }
+        public string? TokenRequired { get; set; }
+        public bool? RegenToken { get; set; }
+        public string? PinEnabled { get; set; }
+        public string? Pin { get; set; }
         public string? Template { get; set; }
         public string? Lang { get; set; }
         public string? TempUnit { get; set; }
@@ -313,12 +491,21 @@ public static class Endpoints
         public string? ServicesHost { get; set; }
         public List<LayoutBox>? Layout { get; set; }
         public string? LayoutHost { get; set; }
+        public List<string>? Widgets { get; set; }
+        public string? WidgetsHost { get; set; }
+        public Dictionary<string, JsonElement>? WidgetConfig { get; set; }
     }
 
     /// <summary>Panel power request from the screensaver "sleep" mode.</summary>
     private sealed class ScreenPower
     {
         public bool On { get; set; } = true;
+    }
+
+    /// <summary>PIN submission from the keypad login page.</summary>
+    private sealed class LoginBody
+    {
+        public string? Pin { get; set; }
     }
 
     /// <summary>Host-removal request from the dashboard (long-press a host tab).</summary>

@@ -47,6 +47,9 @@
           </div>
           <nav id="hostTabs" class="host-tabs"><!-- host tabs injected --></nav>
           <div class="status">
+            <button id="reportBtn" class="icon-btn" data-i18n-aria="aria.openReport" data-i18n-title="report.open" aria-label="open report" title="Report">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="7" width="3" height="11"/><rect x="17" y="14" width="3" height="4"/></svg>
+            </button>
             <span id="connDot" class="conn-dot off" title="stream"></span>
             <span id="clock" class="clock">--:--:--</span>
           </div>
@@ -136,6 +139,23 @@
                 <div class="seg" data-key="kioskAuto"><button data-v="on" data-i18n="settings.auto">Auto</button><button data-v="off" data-i18n="settings.manual">Manual</button></div>
               </div>
               <div class="setting">
+                <label><span data-i18n="settings.tokenRequire">Require agent token</span><small data-i18n="settings.tokenRequireHint">agents must send a secret to push metrics</small></label>
+                <div class="seg" data-key="tokenRequired"><button data-v="on" data-i18n="settings.required">Required</button><button data-v="off" data-i18n="settings.off">Off</button></div>
+              </div>
+              <div class="setting" id="tokenRow">
+                <label><span data-i18n="settings.token">Agent token</span><small data-i18n="settings.tokenHint">copy this into each agent's settings</small></label>
+                <div class="field">
+                  <input id="tokenInput" class="num token-input" type="text" readonly inputmode="none" value="" />
+                  <button id="tokenReveal" class="btn" data-i18n="settings.reveal">Reveal</button>
+                  <button id="tokenCopy" class="btn" data-i18n="settings.copy">Copy</button>
+                  <button id="tokenRegen" class="btn" data-i18n="settings.regen">New</button>
+                </div>
+              </div>
+              <div class="setting">
+                <label><span data-i18n="settings.pinLock">PIN lock</span><small data-i18n="settings.pinLockHint">require a 6-digit PIN to open the dashboard</small></label>
+                <div class="field" id="pinControls"></div>
+              </div>
+              <div class="setting">
                 <label><span data-i18n="settings.exitLogin">Exit to login</span><small data-i18n="settings.exitLoginHint">stop the dashboard, show the Linux console login</small></label>
                 <button id="exitUiBtn" class="btn danger" data-i18n="settings.exitUiBtn">Exit UI</button>
               </div>
@@ -199,7 +219,7 @@
             </div>
             <div class="setting info">
               <label data-i18n="about.hubVersion">Hub version</label>
-              <span class="val" data-i18n="about.hubVersionVal">Beta 0.2</span>
+              <span class="val" data-i18n="about.hubVersionVal">Beta 0.5</span>
             </div>
             <div class="setting info">
               <label data-i18n="about.website">Website</label>
@@ -287,6 +307,17 @@
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         <span data-i18n="common.cancel">Cancel</span>
       </button>
+    </div>
+
+    <!-- ===================== Disks popup (full mount list) ===================== -->
+    <div id="diskPopup" class="popup store hidden" role="dialog" aria-modal="true">
+      <div class="store-head">
+        <span class="store-title" data-i18n="box.storage">Disks</span>
+        <button class="store-close" type="button" data-i18n-aria="nxm.close" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="diskPopupList" class="disk-popup-list"></div>
     </div>
 
     <!-- ===================== On-screen keyboard (services search) ===================== -->

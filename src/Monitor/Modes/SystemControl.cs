@@ -1,13 +1,23 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace Monitor.Modes;
 
 /// <summary>
-/// Privileged host actions the Settings page can trigger (Linux/systemd only). The hub runs as
-/// root under systemd on the rack box, so it can drive <c>systemctl</c>.
+/// Privileged host actions the Settings page can trigger (Linux/systemd only). The hub may run as
+/// root, but can also run as an unprivileged (systemd <c>DynamicUser</c>) identity: in that case the
+/// actions that touch other units go through <c>systemctl</c> and are authorised by a polkit rule
+/// for the hub's service user, and the ones that need the kiosk's own session/files (screen power,
+/// kiosk cache wipe) are delegated to root helpers (the <c>michka-screen-*</c> units and
+/// <c>kiosk.sh</c>) rather than performed in-process. See the deploy/ polkit rule + units.
 /// </summary>
 public static class SystemControl
 {
+    [DllImport("libc")] private static extern uint geteuid();
+
+    /// <summary>True when the hub process is running as root (uid 0). Used to pick the in-process
+    /// privileged path vs. delegating to a root helper unit when running unprivileged.</summary>
+    private static bool IsRoot() => OperatingSystem.IsLinux() && geteuid() == 0;
     /// <summary>
     /// Apply a changed server config: reload the kiosk so chromium reconnects (possibly on a new
     /// port), then exit so systemd restarts the hub with the new settings. Runs after the HTTP
@@ -51,7 +61,15 @@ public static class SystemControl
     public static bool SetKioskAutostart(bool auto, ILogger log)
     {
         if (!OperatingSystem.IsLinux()) return false;
-        _ = Task.Run(() => Run("systemctl", log, auto ? "enable" : "disable", "michka-kiosk.service"));
+        // enable/disable needs the systemd "manage-unit-files" privilege, which the unprivileged hub
+        // can't get from the polkit rule (it grants "manage-units" = start/stop/restart, not unit-file
+        // edits). So when not root, *start* a root helper oneshot (allowed by the rule) that does the
+        // enable/disable as root. Root drives it directly.
+        if (IsRoot())
+            _ = Task.Run(() => Run("systemctl", log, auto ? "enable" : "disable", "michka-kiosk.service"));
+        else
+            _ = Task.Run(() => Run("systemctl", log, "start",
+                auto ? "michka-kiosk-autostart-on.service" : "michka-kiosk-autostart-off.service"));
         log.LogInformation("kiosk autostart {State}", auto ? "enabled" : "disabled");
         return true;
     }
@@ -66,6 +84,16 @@ public static class SystemControl
     public static bool SetScreenPower(bool on, ILogger log)
     {
         if (!OperatingSystem.IsLinux()) return false;
+
+        // A non-root hub can't reach the kiosk's root-owned Wayland session (/run/user/0), so it asks
+        // systemd to run a tiny root helper unit instead (authorised by the michka polkit rule). When
+        // the hub itself is root (legacy/dev), drive wlr-randr directly so no helper unit is required.
+        if (!IsRoot())
+        {
+            _ = Task.Run(() => Run("systemctl", log, "start", on ? "michka-screen-on.service" : "michka-screen-off.service"));
+            return true;
+        }
+
         string state = on ? "--on" : "--off";
         // Discover the Wayland socket the same way the screenshot helper does, then toggle outputs.
         string script =
@@ -94,6 +122,11 @@ public static class SystemControl
     public static void ClearKioskCacheOnUpgrade(string dataDir, ILogger log)
     {
         if (!OperatingSystem.IsLinux()) return;
+        // The kiosk's Chromium profile is owned by the user the kiosk runs as (root on the rack). A
+        // non-root hub can't delete it, so it leaves the wipe to kiosk.sh, which runs as that user and
+        // does the same stamp-keyed clear before launching chromium. Skip here to avoid a half-done
+        // clear that still updates the stamp (which would suppress the kiosk-side wipe).
+        if (!IsRoot()) return;
         try
         {
             var stampPath = Path.Combine(dataDir, ".kiosk-cache-stamp");

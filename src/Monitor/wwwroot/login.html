@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>michka</title>
+<style>
+  :root { --bg:#0b0e13; --card:#161a22; --edge:#262d39; --text:#e8edf5; --muted:#8a94a6; --blue:#5cb3ff; --red:#ff6b6b; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    /* Centre the card, but the kiosk panel is only 400px tall: the keypad is just short enough to
+       fit with room above the title. `overflow:auto` is a safety net (shorter panels can scroll
+       rather than clipping the title/last row). */
+    display: flex; align-items: center; justify-content: center; user-select: none;
+    overflow: auto; padding: 18px 0;
+  }
+  .login { width: 320px; max-width: 92vw; text-align: center; }
+  .brand { font-size: 24px; font-weight: 700; letter-spacing: 1px; margin: 0 0 3px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+  .dots { display: flex; gap: 14px; justify-content: center; margin: 8px 0 4px; height: 16px; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--edge); background: transparent; transition: all .1s; }
+  .dot.on { background: var(--blue); border-color: var(--blue); }
+  .err { color: var(--red); font-size: 13px; height: 16px; margin: 3px 0 8px; }
+  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .key {
+    height: 52px; border: 1px solid var(--edge); border-radius: 14px; background: var(--card);
+    color: var(--text); font-size: 24px; font-weight: 600; cursor: pointer; transition: transform .06s, background .12s;
+  }
+  .key:active { transform: scale(0.95); background: #1d2330; }
+  .key.blank { background: transparent; border-color: transparent; cursor: default; }
+  .key.act:active {}
+  .shake { animation: shk .35s; }
+  @keyframes shk { 10%,90%{transform:translateX(-2px)} 30%,70%{transform:translateX(5px)} 50%{transform:translateX(-7px)} }
+</style>
+</head>
+<body>
+  <div class="login">
+    <h1 class="brand">michka</h1>
+    <p class="sub" id="sub">Enter PIN</p>
+    <div class="dots" id="dots"></div>
+    <div class="err" id="err"></div>
+    <div class="pad" id="pad"></div>
+  </div>
+<script>
+  var PINLEN = 6, pin = "", locked = false;
+  var dotsEl = document.getElementById("dots"), errEl = document.getElementById("err"),
+      subEl = document.getElementById("sub"), padEl = document.getElementById("pad"), loginEl = document.querySelector(".login");
+
+  for (var i = 0; i < PINLEN; i++) { var d = document.createElement("div"); d.className = "dot"; dotsEl.appendChild(d); }
+  function paint() {
+    var ds = dotsEl.children;
+    for (var i = 0; i < ds.length; i++) ds[i].className = "dot" + (i < pin.length ? " on" : "");
+  }
+  var layout = ["1","2","3","4","5","6","7","8","9","","0","back"];
+  layout.forEach(function (k) {
+    var b = document.createElement("button");
+    if (k === "") { b.className = "key blank"; b.disabled = true; }
+    else if (k === "back") { b.className = "key"; b.textContent = "⌫"; b.onclick = back; }
+    else { b.className = "key"; b.textContent = k; b.onclick = function () { press(k); }; }
+    padEl.appendChild(b);
+  });
+
+  function press(d) { if (locked || pin.length >= PINLEN) return; errEl.textContent = ""; pin += d; paint(); if (pin.length === PINLEN) submit(); }
+  function back() { if (locked) return; pin = pin.slice(0, -1); paint(); }
+
+  // Physical keyboard: digit rows + numpad type the PIN, Backspace deletes, Enter submits a full PIN.
+  // (The on-screen keypad is for the touch kiosk; a real keyboard should work too.)
+  document.addEventListener("keydown", function (e) {
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    if (e.key >= "0" && e.key <= "9") { press(e.key); e.preventDefault(); }
+    else if (e.key === "Backspace") { back(); e.preventDefault(); }
+    else if (e.key === "Enter") { if (!locked && pin.length === PINLEN) submit(); e.preventDefault(); }
+  });
+  function fail(msg) { errEl.textContent = msg; pin = ""; paint(); loginEl.classList.remove("shake"); void loginEl.offsetWidth; loginEl.classList.add("shake"); }
+
+  async function submit() {
+    try {
+      var r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: pin }) });
+      if (r.ok) { location.href = "/"; return; }
+      if (r.status === 429) { var j = await r.json().catch(function(){return{};}); lockout(j.retryAfter || 120); return; }
+      fail("Wrong PIN");
+    } catch (e) { fail("Connection error"); }
+  }
+
+  function lockout(sec) {
+    locked = true; pin = ""; paint();
+    function tick() {
+      if (sec <= 0) { locked = false; errEl.textContent = ""; subEl.textContent = "Enter PIN"; return; }
+      errEl.textContent = "Too many attempts. Try again in " + sec + "s";
+      sec--; setTimeout(tick, 1000);
+    }
+    tick();
+  }
+
+  // If a PIN isn't required (or we're already in), skip straight to the dashboard.
+  fetch("/api/auth").then(function (r) { return r.json(); })
+    .then(function (j) { if (!j.pinEnabled || j.authenticated) location.href = "/"; })
+    .catch(function () {});
+</script>
+</body>
+</html>
