@@ -1,0 +1,6 @@
+{
+  "name": "LAZY",
+  "description": "Everything in one box: CPU, memory, GPU, disks and network as a stack of flat 0 to 100% horizontal usage bars. No draggable boxes, just a single fixed overview panel.",
+  "author": "michka",
+  "version": "1.0"
+}

@@ -13,6 +13,44 @@
    colours only — no gradients. Box dimensions are unchanged.
    ============================================================================ */
 
+/* ---------------------------------------------------------------------------
+   Dark-Purple background (matches NexusM's "Dark Purple" theme).
+
+   The default (folded-Futura) skin sits on a near-black backdrop with neutral
+   dark-grey bubbles. This template re-tints the whole dashboard to NexusM's
+   Dark Purple: a #120b1e backdrop, #221638 surfaces, #2e1f50 edges, a #9b6dff
+   accent and soft lilac text — the same token set NexusM's theme uses. We
+   redefine the theme's CSS variables on body.futura-design (everything reads
+   them: bubbles, clock, host tabs, bars, chips), repaint the body backdrop the
+   default block set to near-black, and swap the two hardcoded blue accent tints
+   (active host tab, armed box) for the purple accent. Flat solid fills — no
+   colour gradients. The cyan/orange/green data colours stay and read on purple.
+   --------------------------------------------------------------------------- */
+body.futura-design {
+  --bg: #120b1e;         /* backdrop            (Dark Purple bg-primary) */
+  --bg2: #1a1029;        /* secondary screens   (bg-secondary)           */
+  --text: #e0d8f0;       /* primary text        (text-primary)           */
+  --muted: #9585b5;      /* muted text          (text-secondary)         */
+  --f-bubble: #241839;   /* card top    (near bg-surface #221638)        */
+  --f-bubble-2: #1c1330; /* card bottom (a touch darker for depth)       */
+  --f-edge: #2e1f50;     /* card/divider border (border)                 */
+  --f-accent: #9b6dff;   /* seg buttons, focus  (accent)                 */
+  --f-accent-2: #b18aff; /* accent-hover                                 */
+  /* Repaint the backdrop the default block set to near-black. */
+  background: radial-gradient(1400px 600px at 50% -20%, rgba(155, 109, 255, 0.10), transparent 60%), var(--bg);
+}
+/* The default block hardcodes a blue accent for the active host tab and the
+   armed/dragging box; recolour both to the purple accent so the skin is cohesive. */
+body.futura-design .host-tabs .tab.active {
+  border-color: rgba(155, 109, 255, 0.7);
+  background: rgba(155, 109, 255, 0.18);
+}
+body.futura-design .board .box.armed,
+body.futura-design .board .box.dragging {
+  border-color: rgba(155, 109, 255, 0.85);
+  box-shadow: 0 0 0 2px rgba(155, 109, 255, 0.35), 0 14px 34px rgba(0, 0, 0, 0.6);
+}
+
 /* script.js sets body.futura-design while this template is active. Hide the default CPU gauge +
    per-core bars, the Network line chart, and the Network header speeds — the injected column charts
    replace them. */
@@ -53,13 +91,14 @@ body.futura-design .box-net .metric-pair { display: none; }
 /* The injected ECharts canvas fills the remaining height. */
 .f-chart { flex: 1 1 auto; min-height: 0; width: 100%; }
 
-/* Disks: restyle the default vertical rows into single horizontal pill rows (CSS only — script.js
-   doesn't touch the disk box). The default markup is [.top(.mnt,.cap)] + [.track(.fill)]; lay it out
-   as [label stack | long pill bar] and fatten the bar. */
-body.futura-design .box-storage .disk {
-  display: grid; grid-template-columns: 70px 1fr; align-items: center; column-gap: 10px;
-}
-body.futura-design .box-storage .disk .top { flex-direction: column; align-items: flex-start; gap: 0; min-width: 0; }
-body.futura-design .box-storage .disk .top .mnt { font-size: 12px; }
-body.futura-design .box-storage .disk .top .cap { font-size: 9.5px; }
+/* Disks (CSS only — script.js doesn't touch the disk box). The default markup is
+   [.top(.mnt,.cap)] + [.track(.fill)]. The old "label stack | bar" two-column grid was too cramped:
+   88px couldn't hold either the mount path or "141 GB / 225 GB · 63%", so they truncated to nothing
+   and a long name still spilled into the bar. Instead keep the default VERTICAL stack — name + usage
+   on one row (name truncates, usage pinned right), full-width fat pill below — which can never
+   overlap, and just give it the Futura look. Rows breathe a little more so 2–5 disks stay legible. */
+body.futura-design .box-storage .disks { gap: 12px; }
+body.futura-design .box-storage .disk { gap: 5px; }
+body.futura-design .box-storage .disk .top { font-size: 12px; }
+body.futura-design .box-storage .disk .top .cap { font-size: 10px; }
 body.futura-design .box-storage .disk .track { height: 14px; }

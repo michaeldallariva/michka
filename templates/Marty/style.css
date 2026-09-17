@@ -129,8 +129,10 @@ body.marty-design .box-net .metric-pair { display: none; }
    vars that script.js sets from the disk count, so 2..5 disks stay centred AND fit the box. */
 .marty.disks { gap: var(--disk-gap, 14px); justify-content: center; }
 .marty.disks .marty-readout { flex-direction: row; align-items: baseline; gap: 12px; width: 100%; justify-content: center; }
-.marty.disks .marty-label { min-width: 46px; text-align: right; }
-.marty.disks .marty-num { font-size: calc(var(--disk-fs, 40px) * var(--ui-scale, 1)); }
+/* Cap the label width and truncate it so a long mount path (e.g. /VAR/LIB/MICHKA-BUNDLE) can't wrap
+   and collide with the big LED number beside it. Tap the box for the full list. */
+.marty.disks .marty-label { flex: 0 1 auto; min-width: 46px; max-width: 45%; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.marty.disks .marty-num { flex: 0 0 auto; font-size: calc(var(--disk-fs, 40px) * var(--ui-scale, 1)); }
 
 /* ---- GPU drop-in widget: numbers-only LED restyle (CSS; the widget keeps polling) ---- */
 body.marty-design .widget-gpu-temp .gput-bar { display: none; }

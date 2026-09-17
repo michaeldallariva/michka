@@ -1,0 +1,76 @@
+/* ============================================================================
+   LAZY - single-box overview template.
+
+   Instead of the freeform board of draggable metric boxes, LAZY collapses the
+   whole dashboard into ONE fixed panel that fills the board, showing CPU, memory,
+   GPU, disks and network as a stack of flat horizontal 0-100% usage bars (the
+   look of a "top genres" list). script.js sets body.lazy-design while active,
+   injects the panel into #board and drives it from app.js's live `state`.
+
+   Because there are no boxes, there is nothing to long-press / no "Add a box"
+   chooser - the panel is a plain element (not a .box), and it covers the board so
+   the hidden boxes underneath never receive the press.
+
+   Flat solid colours only - no gradients (per the project's data-display rules).
+   ============================================================================ */
+
+/* Hide the default draggable boxes - LAZY shows a single overview panel instead. body.lazy-design is
+   set by app.js's applyTemplate() up front (before this stylesheet loads), so the boxes are hidden the
+   instant the stylesheet goes live - no default-board flash on load. */
+body.lazy-design .board .box { display: none !important; }
+
+/* The overview panel fills the whole board and sits above the (hidden) boxes. */
+.lz-panel {
+  position: absolute; inset: 0; z-index: 30;
+  display: flex; flex-direction: column;
+  padding: calc(12px * var(--ui-scale, 1)) calc(16px * var(--ui-scale, 1));
+  border: 1px solid var(--f-edge);
+  border-radius: 14px;
+  background: var(--f-bubble, var(--card));
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4) inset;
+  overflow: hidden;
+}
+
+/* Header - reuses the default .card-head h2 skin (centred uppercase, white square
+   caps, bottom divider) so it matches every other box in the default look. */
+.lz-panel .card-head { display: block; flex: 0 0 auto; }
+.lz-panel .card-head h2 {
+  text-align: center; padding-bottom: 9px; margin-bottom: 10px;
+  border-bottom: 1px solid var(--f-edge);
+}
+
+/* Row stack - distributes evenly down the panel so it always fits the board
+   regardless of how many metrics are present (CPU/mem always, GPU/disks/swap
+   conditional). */
+.lz-rows { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: space-around; }
+.lz-row {
+  flex: 1 1 0; min-height: 0;
+  display: grid; align-items: center;
+  grid-template-columns: calc(96px * var(--ui-scale, 1)) 1fr calc(74px * var(--ui-scale, 1));
+  column-gap: calc(14px * var(--ui-scale, 1));
+}
+
+.lz-label {
+  font-size: calc(13px * var(--ui-scale, 1)); color: var(--text); font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Fully-rounded pill bar (track + grow-to-width fill), like the reference list. */
+.lz-track {
+  height: calc(12px * var(--ui-scale, 1)); border-radius: 999px;
+  background: var(--f-track, rgba(255, 255, 255, 0.10)); overflow: hidden;
+}
+.lz-fill {
+  height: 100%; width: 0; border-radius: 999px;
+  transition: width .35s ease, background-color .2s ease;
+}
+
+.lz-val {
+  text-align: right; font-variant-numeric: tabular-nums;
+  font-size: calc(13px * var(--ui-scale, 1)); font-weight: 700; color: var(--text);
+}
+/* Network rows carry a rate string instead of a percentage - a touch smaller so
+   "1023 MB/s" never clips the value column. */
+.lz-row[data-k="rx"] .lz-val, .lz-row[data-k="tx"] .lz-val {
+  font-size: calc(11px * var(--ui-scale, 1)); color: var(--muted);
+}
