@@ -1,7 +1,7 @@
 # Monitor
 
 A cross-platform, single-binary hardware dashboard. It runs a small Kestrel web server and serves
-a striking, touch-friendly dark dashboard of live system metrics — CPU, memory, network, disk and
+a striking, touch-friendly dark dashboard of live system metrics : CPU, memory, network, disk and
 temperatures — designed to fill a **1280x400, 1424x280, 1920x440 and 1920x515** touchscreens, but usable from any browser.
 
 Other machines on the network can push their own stats to the hub, and you can tap to switch which
