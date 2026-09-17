@@ -1,0 +1,158 @@
+/* Alerting widget — card status list, full-screen settings overlay, and the global pop-up stack.
+   Shared theme tokens so templates re-skin it; flat colours only (no gradients). Scales with var(--ui-scale). */
+
+.widget-alerting .widget-body { position: relative; display: block; }
+.al-root { width: 100%; height: 100%; display: flex; flex-direction: column; }
+
+/* Gear, top-right. */
+.al-gear {
+  position: absolute; top: 0; right: 0; z-index: 2;
+  width: 30px; height: 30px; padding: 0; border-radius: 8px;
+  border: 1px solid transparent; background: transparent; color: var(--muted); cursor: pointer;
+}
+.al-gear:active { color: var(--text); }
+
+/* Header: overall status + rule count. */
+.al-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 34px; margin-bottom: 10px; }
+.al-status { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: calc(16px * var(--ui-scale, 1)); }
+.al-status-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; }
+.al-status.ok .al-status-dot { background: var(--green, #46d369); }
+.al-status.ok .al-status-txt { color: var(--green, #46d369); }
+.al-status.firing .al-status-dot { background: var(--red, #ff5d5d); animation: al-pulse 1.1s ease-in-out infinite; }
+.al-status.firing .al-status-txt { color: var(--red, #ff5d5d); }
+.al-rule-count { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+@keyframes al-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* Rule rows. */
+.al-list { display: flex; flex-direction: column; gap: 7px; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.al-row { display: flex; align-items: center; gap: 10px; }
+.al-row.off { opacity: 0.45; }
+.al-dot { width: 10px; height: 10px; flex: 0 0 auto; border-radius: 50%; background: var(--muted); }
+.al-dot.ok { background: var(--green, #46d369); }
+.al-dot.pending { background: var(--amber, #ffb020); }
+.al-dot.firing { background: var(--red, #ff5d5d); animation: al-pulse 1.1s ease-in-out infinite; }
+.al-dot.idle { background: var(--muted); opacity: 0.5; }
+.al-main { flex: 1 1 auto; min-width: 0; }
+.al-rule-label { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.al-rule-sub { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.al-sev { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; flex: 0 0 auto; padding: 2px 7px; border-radius: 999px; }
+.al-sev.al-warning { color: var(--amber, #ffb020); border: 1px solid var(--amber, #ffb020); }
+.al-sev.al-critical { color: var(--red, #ff5d5d); border: 1px solid var(--red, #ff5d5d); }
+
+/* Empty / setup state. */
+.al-setup { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; height: 100%; text-align: center; color: var(--text); }
+.al-setup-icon { color: var(--amber, #ffb020); }
+.al-setup-title { font-size: 16px; font-weight: 700; }
+.al-setup-hint { font-size: 12px; color: var(--muted); max-width: 92%; }
+
+/* Shared button. */
+.al-btn { border: 1px solid var(--blue); background: var(--blue); color: #04101f; font-weight: 700; font-size: calc(15px * var(--ui-scale, 1)); border-radius: 10px; padding: calc(10px * var(--ui-scale, 1)) calc(18px * var(--ui-scale, 1)); cursor: pointer; }
+.al-btn:active { filter: brightness(1.1); }
+.al-mini { border: 1px solid var(--card-brd); background: rgba(255, 255, 255, 0.05); color: var(--text); font-weight: 700; font-size: 13px; border-radius: 9px; padding: 8px 14px; cursor: pointer; }
+.al-mini:active { background: rgba(255, 255, 255, 0.12); }
+
+/* ======================= settings overlay (top-anchored so the OSK doesn't cover fields) ======================= */
+.al-overlay { position: fixed; inset: 0; z-index: 52; background: var(--bg); display: flex; align-items: flex-start; justify-content: center; color: var(--text); overflow: hidden; }
+.al-ov-close { position: absolute; top: calc(12px * var(--ui-scale, 1)); right: calc(12px * var(--ui-scale, 1)); z-index: 3; width: calc(46px * var(--ui-scale, 1)); height: calc(46px * var(--ui-scale, 1)); border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.06); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.al-panel { width: min(97vw, 1600px); display: flex; flex-direction: column; gap: 10px; margin-top: 1.5vh; height: 95vh; zoom: var(--ui-scale, 1); }
+.al-ov-title { font-size: 22px; font-weight: 800; }
+.al-hint { font-size: 13.5px; color: var(--muted); margin: 0 0 8px; line-height: 1.45; max-width: 70ch; }
+
+/* Tabs. */
+.al-tabs { display: flex; gap: 8px; }
+.al-tab { padding: 9px 22px; border-radius: 10px 10px 0 0; border: 1px solid var(--card-brd); border-bottom: none; background: transparent; color: var(--muted); font-weight: 700; font-size: 15px; cursor: pointer; }
+.al-tab.on { background: rgba(255, 255, 255, 0.06); color: var(--text); }
+
+/* Body: scrolling content on the left, fixed keypad + Save column on the right. */
+.al-body-row { flex: 1 1 auto; min-height: 0; display: flex; gap: 14px; }
+.al-tabbody { flex: 1 1 auto; min-width: 0; min-height: 0; overflow-y: auto; border: 1px solid var(--card-brd); border-radius: 0 10px 10px 10px; padding: 16px 18px; }
+.al-side { flex: 0 0 300px; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+
+/* Rules editor. */
+.al-edit-list { display: flex; flex-direction: column; gap: 8px; }
+.al-none { color: var(--muted); font-size: 13px; padding: 8px 2px; }
+.al-edit-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; padding: 14px 16px; border: 1px solid var(--card-brd); border-radius: 12px; background: rgba(255, 255, 255, 0.03); }
+.al-ef { display: flex; flex-direction: column; gap: 5px; }
+.al-ef label { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); height: 14px; line-height: 14px; }
+/* One control row per field (select/input + unit inline) so every field is the same height and aligns. */
+.al-inrow { display: flex; align-items: center; gap: 6px; height: 42px; }
+.al-sel { height: 42px; padding: 0 10px; border-radius: 9px; font-size: 15px; border: 1px solid var(--card-brd); background: rgba(255, 255, 255, 0.05); color: var(--text); }
+.al-sel option { background: #12151b; color: var(--text); }
+.al-sel option:checked { background: var(--blue); }
+.al-num { width: 66px; height: 42px; padding: 0 8px; border-radius: 9px; font-size: 15px; text-align: center; border: 1px solid var(--card-brd); background: rgba(255, 255, 255, 0.05); color: var(--text); }
+.al-unit { font-size: 13px; color: var(--muted); }
+.al-del { align-self: flex-end; flex: 0 0 auto; width: 42px; height: 42px; border-radius: 9px; cursor: pointer; border: 1px solid var(--card-brd); background: rgba(255, 255, 255, 0.05); color: var(--red, #ff5d5d); display: flex; align-items: center; justify-content: center; }
+.al-del:active { background: rgba(255, 90, 90, 0.18); }
+.al-addrow { align-self: flex-start; margin-top: 10px; padding: 9px 16px; border-radius: 10px; cursor: pointer; border: 1px dashed var(--card-brd); background: transparent; color: var(--text); font-weight: 700; font-size: 14px; }
+
+/* Per-rule client targeting chips (wraps to its own full-width line under the condition). */
+.al-targets { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--card-brd); }
+.al-tlabel { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin-right: 2px; }
+.al-chip { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--card-brd); background: rgba(255, 255, 255, 0.05); color: var(--muted); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.al-chip.on { border-color: var(--blue); background: rgba(74, 163, 255, 0.18); color: var(--text); }
+.al-chip.al-addc { border-style: dashed; color: var(--text); }
+.al-chip.al-addok { border-color: var(--green, #46d369); color: var(--green, #46d369); font-weight: 800; }
+.al-chip-in { padding: 5px 11px; border-radius: 999px; border: 1px solid var(--blue); background: rgba(255, 255, 255, 0.06); color: var(--text); font-size: 12.5px; width: 140px; }
+
+/* Channels. */
+.al-channels { display: flex; flex-direction: column; gap: 10px; }
+.al-ch { border: 1px solid var(--card-brd); border-radius: 12px; padding: 12px 14px; background: rgba(255, 255, 255, 0.03); }
+.al-ch-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.al-ch-name { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.al-badge { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 7px; border-radius: 999px; }
+.al-badge.live { color: var(--green, #46d369); border: 1px solid var(--green, #46d369); }
+.al-badge.soon { color: var(--muted); border: 1px solid var(--card-brd); }
+.al-ch-desc { font-size: 12px; color: var(--muted); margin: 4px 0 0; line-height: 1.4; }
+.al-ch-note { font-size: 11px; font-weight: 700; color: var(--amber, #e0a63a); margin: 6px 0 0; text-transform: uppercase; letter-spacing: 0.4px; }
+.al-ch-body { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin-top: 12px; }
+.al-cf { display: flex; align-items: center; gap: 8px; }
+.al-cf.al-cf-col { flex-direction: column; align-items: flex-start; gap: 3px; flex: 1 1 240px; min-width: 200px; }
+.al-cf label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); }
+.al-txt { width: 100%; padding: 10px 11px; border-radius: 9px; font-size: 15px; border: 1px solid var(--card-brd); background: rgba(255, 255, 255, 0.05); color: var(--text); }
+
+/* Toggle switch. */
+.al-switch { position: relative; display: inline-block; width: 46px; height: 26px; flex: 0 0 auto; cursor: pointer; }
+.al-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.al-track { position: absolute; inset: 0; border-radius: 999px; background: rgba(255, 255, 255, 0.14); border: 1px solid var(--card-brd); transition: background 0.15s; }
+.al-track::before { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--muted); transition: transform 0.15s, background 0.15s; }
+.al-switch input:checked + .al-track { background: rgba(70, 211, 105, 0.25); }
+.al-switch input:checked + .al-track::before { transform: translateX(20px); background: var(--green, #46d369); }
+
+/* Symbol/number pad — 4 columns in the right side column, so keys are big and readable. */
+.al-pad { display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: minmax(46px, 1fr); gap: 8px; flex: 1 1 auto; min-height: 0; }
+.al-pad-key { border: 1px solid var(--card-brd); background: rgba(255, 255, 255, 0.05); color: var(--text); border-radius: 10px; font-size: 20px; cursor: pointer; }
+.al-pad-key:active { background: rgba(255, 255, 255, 0.12); }
+.al-save { flex: 0 0 auto; width: 100%; text-align: center; }
+
+/* ======================= global pop-up stack (appended to <body>, survives host switches) =======================
+   Sized large on purpose so an alert is unmissable from across the room on the panel (~3x the base toast). */
+/* Toasts STACK vertically at the top-right anchor (newest on top), so several concurrent alerts are all
+   visible at once instead of hiding behind each other. Each is independently dismissible — closing one
+   removes it and the rest reflow up; the others stay until they dismiss (or auto-fade). The container is
+   click-through (pointer-events:none) with only the toasts themselves interactive, so the empty gaps
+   don't block the dashboard beneath. The JS caps the count to what fits the screen height (capStack/
+   fitCount) so the column can never run off the panel bottom — older toasts roll off as new ones arrive;
+   the rest thin out as they're closed / auto-dismiss. */
+.al-stack { position: fixed; top: 20px; right: 20px; z-index: 54; display: flex; flex-direction: column; align-items: stretch; gap: 16px; width: min(94vw, 960px); pointer-events: none; }
+.al-toast {
+  pointer-events: auto; display: flex; align-items: flex-start; gap: 26px;
+  padding: 34px 38px; border-radius: 20px; background: #161a20; border: 1px solid var(--card-brd);
+  border-left: 12px solid var(--muted); box-shadow: 0 16px 46px rgba(0, 0, 0, 0.5);
+  transform: translateX(120%); opacity: 0; transition: transform 0.26s ease, opacity 0.26s ease;
+}
+.al-toast.in { transform: translateX(0); opacity: 1; }
+.al-toast.out { transform: translateX(120%); opacity: 0; }
+.al-toast.al-warning { border-left-color: var(--amber, #ffb020); }
+.al-toast.al-critical { border-left-color: var(--red, #ff5d5d); }
+.al-toast.al-recovery { border-left-color: var(--green, #46d369); }
+.al-toast-ic { flex: 0 0 auto; color: var(--muted); }
+.al-toast-ic svg { width: 100px; height: 100px; }
+.al-toast.al-warning .al-toast-ic { color: var(--amber, #ffb020); }
+.al-toast.al-critical .al-toast-ic { color: var(--red, #ff5d5d); }
+.al-toast.al-recovery .al-toast-ic { color: var(--green, #46d369); }
+.al-toast-main { flex: 1 1 auto; min-width: 0; align-self: center; }
+.al-toast-title { font-size: 40px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--text); line-height: 1.05; }
+.al-toast-msg { font-size: 38px; color: var(--text); margin-top: 8px; line-height: 1.3; word-break: break-word; }
+.al-toast-x { flex: 0 0 auto; width: 64px; height: 64px; border: none; background: transparent; color: var(--muted); cursor: pointer; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+.al-toast-x svg { width: 46px; height: 46px; }
+.al-toast-x:active { background: rgba(255, 255, 255, 0.1); color: var(--text); }

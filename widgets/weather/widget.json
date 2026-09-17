@@ -1,0 +1,7 @@
+{
+  "name": "Weather",
+  "description": "Live local weather for a town you pick. Search any town and choose the right one when several countries share the name (Paris FR vs Paris TX). Current conditions plus a 5-day forecast. Data by Open-Meteo (CC BY 4.0), no API key. Fetched directly from the kiosk; an optional proxy can be set in the widget's settings.",
+  "author": "michka",
+  "version": "1.0",
+  "tag": "WEATHER"
+}

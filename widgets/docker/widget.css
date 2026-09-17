@@ -1,0 +1,56 @@
+/* Docker widget. Uses the shared theme tokens (var(--text)/(--muted)/(--green)/(--orange)/(--red)/
+   (--cyan)) so active templates re-skin it; flat colours only (no gradients). Fills a full-height box:
+   a count header on top, then a scrollable per-container list. */
+.widget-docker .widget-body { display: block; position: relative; }
+
+.dk { display: flex; flex-direction: column; height: 100%; width: 100%; gap: 8px; color: var(--text); }
+
+/* Header: "running / total". */
+.dk-head { display: flex; align-items: baseline; gap: 8px; }
+.dk-count { font-size: calc(26px * var(--ui-scale, 1)); font-weight: 800; font-variant-numeric: tabular-nums; }
+.dk-count-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+
+/* Container list (scrolls if taller than the box). */
+.dk-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; flex: 1; min-height: 0; }
+.dk-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.04);
+}
+
+.dk-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; background: var(--muted); }
+.dk-dot.ok { background: var(--green); }
+.dk-dot.warn { background: var(--orange); }
+.dk-dot.bad { background: var(--red); }
+.dk-dot.off { background: #6b7280; }
+
+.dk-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.dk-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dk-img { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.dk-stats { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.dk-stat { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
+.dk-sk { font-size: 8px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+.dk-sv { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.dk-net .dk-sv { font-size: 10px; font-weight: 600; color: var(--cyan); white-space: nowrap; }
+
+/* Stopped/other state: a small grey pill instead of live stats. */
+.dk-state-pill {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted);
+  border: 1px solid var(--card-brd); border-radius: 6px; padding: 2px 7px;
+}
+
+.dk-msg { font-size: 12px; color: var(--muted); text-align: center; padding: 6px 0; }
+.dk-list:empty + .dk-msg { margin-top: 10px; }
+
+/* On the narrow board box, drop the bulky NET column so CPU/MEM stay readable; it's still in the
+   widgets-page card (wider) and available via the memory cell's title tooltip. */
+.box.widget-docker .dk-net { display: none; }
+
+/* "Install the agent" prompt shown when no agent reports Docker for this host. */
+.dk-install {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; height: 100%; text-align: center; padding: 0 12px;
+}
+.dk-install-icon { color: var(--blue); }
+.dk-install-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.dk-install-hint { font-size: 12px; color: var(--muted); max-width: 90%; line-height: 1.4; }

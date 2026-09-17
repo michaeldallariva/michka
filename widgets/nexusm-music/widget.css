@@ -15,6 +15,10 @@
   font-size: 13px; color: var(--muted); max-width: 90%;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.widget-nexusm-music .nxm-launch-url {
+  font-size: 11px; color: var(--muted); opacity: 0.85; max-width: 92%;
+  white-space: normal; overflow-wrap: anywhere; line-height: 1.35; text-align: center;
+}
 .widget-nexusm-music .nxm-launch-btn { margin-top: 4px; }
 
 /* ---- shared button ---- */
@@ -108,10 +112,21 @@
 }
 .nxm-url-clear:active { color: var(--text); }
 
-/* PIN field: shown as plain digits (visible while typing), wide letter-spacing. */
-.nxm-pin { letter-spacing: calc(6px * var(--ui-scale, 1)); }
-/* Inline PIN keypad: 3 columns, narrower than the URL pad. */
-.nxm-pad-num { grid-template-columns: repeat(3, 1fr); width: calc(190px * var(--ui-scale, 1)); }
+/* PIN field: masked (password dots), wide letter-spacing so the dots sit like a PIN. */
+.nxm-pin { letter-spacing: calc(8px * var(--ui-scale, 1)); }
+/* Inline PIN keypad: 3 columns, large touch keys that scale DYNAMICALLY with the screen (viewport
+   units, clamped) so it fills the login panel on the kiosk instead of sitting small. Login-only. */
+.nxm-pad-num {
+  grid-template-columns: repeat(3, 1fr);
+  width: clamp(240px, 32vw, 460px);
+  gap: clamp(10px, 2.2vh, 18px);
+}
+.nxm-pad-num .nxm-pad-key {
+  font-size: clamp(24px, 7vh, 44px);
+  padding: clamp(14px, 5vh, 34px) 0;
+  border-radius: 14px;
+  font-weight: 700;
+}
 
 /* discovered-servers list (tap a row to choose it) */
 .nxm-results { display: flex; flex-direction: column; gap: calc(6px * var(--ui-scale, 1)); }

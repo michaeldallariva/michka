@@ -1,0 +1,145 @@
+/* Weather widget — inline card + full-screen settings overlay.
+   Uses the shared theme tokens (var(--text)/(--muted)/(--blue)/(--cyan)/(--orange)/(--bg)/(--card-brd))
+   so active templates re-skin it; flat colours only (no gradients) per the project's data-display rules.
+   Key sizes scale with var(--ui-scale) so the four target panels stay readable. */
+
+/* ---- card body fills a full-height box, top-anchored under the header divider ---- */
+.widget-weather .widget-body { display: block; }
+.wx-root { width: 100%; height: 100%; }
+.widget-weather .wx-gear,
+.widget-weather .wx-setup,
+.widget-weather .wx { /* positioning context for the gear */ }
+
+.widget-weather .widget-body { position: relative; }
+
+/* Gear button, top-right of the card. */
+.wx-gear {
+  position: absolute; top: 0; right: 0; z-index: 2;
+  width: 30px; height: 30px; padding: 0; border-radius: 8px;
+  border: 1px solid transparent; background: transparent; color: var(--muted); cursor: pointer;
+}
+.wx-gear:active { color: var(--text); }
+
+/* ---- unconfigured state ---- */
+.wx-setup {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; height: 100%; text-align: center; color: var(--text);
+}
+.wx-setup-icon { color: var(--blue); }
+.wx-setup-title { font-size: 16px; font-weight: 700; }
+.wx-setup-hint { font-size: 12px; color: var(--muted); max-width: 90%; }
+
+/* ---- populated card ---- */
+.wx { display: flex; flex-direction: column; height: 100%; gap: 8px; color: var(--text); }
+.wx-place {
+  font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding-right: 34px; /* clear the gear */
+}
+.wx-cur { display: flex; align-items: center; gap: 12px; }
+.wx-cur-icon { color: var(--text); display: flex; }
+.wx-cur-icon .wx-i.sun { color: var(--orange); }
+.wx-cur-icon .wx-i.rain { color: var(--cyan); }
+.wx-cur-icon .wx-i.snow { color: var(--blue); }
+.wx-cur-icon .wx-i.thunder { color: var(--orange); }
+.wx-cur-main { display: flex; flex-direction: column; }
+.wx-temp { font-size: calc(40px * var(--ui-scale, 1)); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.wx-cond { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+.wx-meta { display: flex; gap: 14px; flex-wrap: wrap; }
+.wx-meta-i { display: flex; flex-direction: column; }
+.wx-k { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+.wx-v { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* 5-day strip. */
+.wx-days { display: flex; gap: 6px; margin-top: auto; }
+.wx-day {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 6px 2px; border-radius: 8px; background: rgba(255, 255, 255, 0.04);
+}
+.wx-day-name { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.wx-day-icon { color: var(--text); height: 22px; }
+.wx-day-temps { display: flex; gap: 5px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.wx-hi { font-weight: 700; }
+.wx-lo { color: var(--muted); }
+
+.wx-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.wx-msg { font-size: 11px; color: var(--orange); }
+.wx-credit { font-size: 9px; color: var(--muted); opacity: 0.7; margin-left: auto; }
+
+.wx-i { display: inline-flex; }
+
+/* ---- shared button ---- */
+.wx-btn {
+  border: 1px solid var(--blue); background: var(--blue); color: #04101f;
+  font-weight: 700; font-size: calc(15px * var(--ui-scale, 1)); border-radius: 10px;
+  padding: calc(10px * var(--ui-scale, 1)) calc(18px * var(--ui-scale, 1)); cursor: pointer;
+}
+.wx-btn:active { filter: brightness(1.1); }
+
+/* ---- full-screen settings overlay ----
+   Anchored to the TOP, not centred: the shared on-screen keyboard slides up from the bottom, so the
+   search field + results must live in the upper part of the screen to stay visible while typing. */
+.wx-overlay {
+  position: fixed; inset: 0; z-index: 52; background: var(--bg);
+  display: flex; align-items: flex-start; justify-content: center; color: var(--text);
+  font-size: calc(16px * var(--ui-scale, 1)); overflow: hidden;
+}
+.wx-ov-close {
+  position: absolute; top: calc(12px * var(--ui-scale, 1)); right: calc(12px * var(--ui-scale, 1));
+  z-index: 3; width: calc(46px * var(--ui-scale, 1)); height: calc(46px * var(--ui-scale, 1));
+  border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06); color: var(--text); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.wx-panel {
+  width: min(92vw, 860px); display: flex; flex-direction: column;
+  margin-top: 2.5vh; zoom: var(--ui-scale, 1);
+}
+.wx-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+.wx-tab {
+  flex: 1; padding: 10px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--card-brd); background: transparent; color: var(--muted);
+  font-weight: 700; font-size: 15px;
+}
+.wx-tab.on { color: var(--text); border-color: var(--blue); background: rgba(80, 150, 255, 0.12); }
+.wx-pane { display: flex; flex-direction: column; gap: 12px; }
+.wx-hint { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.4; }
+
+.wx-searchrow { display: flex; gap: 8px; }
+.wx-input {
+  flex: 1; padding: 12px 14px; border-radius: 10px; font-size: 17px;
+  border: 1px solid var(--card-brd); background: rgba(255, 255, 255, 0.05); color: var(--text);
+}
+.wx-clear, .wx-url-prefix {
+  border: 1px solid var(--card-brd); background: rgba(255, 255, 255, 0.05); color: var(--muted);
+  border-radius: 10px; padding: 0 14px; font-size: 16px; cursor: pointer;
+}
+.wx-url-prefix { font-weight: 700; white-space: nowrap; }
+
+.wx-status { font-size: 13px; color: var(--muted); min-height: 18px; }
+.wx-results { display: flex; flex-direction: column; gap: 6px; max-height: 30vh; overflow-y: auto; }
+.wx-result {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left;
+  padding: 10px 14px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--card-brd); background: rgba(255, 255, 255, 0.04); color: var(--text);
+}
+.wx-result:active { border-color: var(--blue); }
+.wx-result-name { font-size: 16px; font-weight: 700; }
+.wx-result-sub { font-size: 12px; color: var(--muted); }
+
+/* Network pane. */
+.wx-toggle-row { display: flex; align-items: center; justify-content: space-between; }
+.wx-field-label { font-size: 13px; color: var(--muted); }
+.wx-seg { display: flex; border: 1px solid var(--card-brd); border-radius: 10px; overflow: hidden; }
+.wx-seg-b { padding: 8px 18px; background: transparent; color: var(--muted); border: 0; cursor: pointer; font-weight: 700; }
+.wx-seg-b.on { background: var(--blue); color: #04101f; }
+.wx-url-row { display: flex; gap: 8px; }
+.wx-url-input { flex: 1; }
+
+/* Wide keypad: two rows of seven, full width, sitting below the Save button. */
+.wx-pad { display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 52px; gap: 8px; margin-top: 4px; }
+.wx-pad-key {
+  border: 1px solid var(--card-brd); background: rgba(255, 255, 255, 0.05); color: var(--text);
+  border-radius: 10px; font-size: 20px; cursor: pointer;
+}
+.wx-pad-key:active { background: rgba(255, 255, 255, 0.12); }

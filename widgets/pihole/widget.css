@@ -1,0 +1,87 @@
+/* Pi-hole widget — inline stats card + full-screen settings overlay.
+   Shared theme tokens so templates re-skin it; flat colours only. Sizes scale with var(--ui-scale). */
+
+.widget-pihole .widget-body { position: relative; display: block; }
+.ph-root { width: 100%; height: 100%; }
+
+.ph-gear {
+  position: absolute; top: 0; right: 0; z-index: 2;
+  width: 30px; height: 30px; padding: 0; border-radius: 8px;
+  border: 1px solid transparent; background: transparent; color: var(--muted); cursor: pointer;
+}
+.ph-gear:active { color: var(--text); }
+
+/* Setup / unconfigured. */
+.ph-setup {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; height: 100%; text-align: center; color: var(--text);
+}
+.ph-setup-icon { color: var(--green, #46d369); }
+.ph-setup-title { font-size: 16px; font-weight: 700; }
+.ph-setup-hint { font-size: 12px; color: var(--muted); max-width: 90%; }
+
+/* Populated card. */
+.ph { display: flex; flex-direction: column; height: 100%; gap: 8px; color: var(--text); }
+.ph-hero { display: flex; flex-direction: column; align-items: flex-start; padding-right: 34px; }
+.ph-pct { font-size: calc(44px * var(--ui-scale, 1)); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: var(--green, #46d369); }
+.ph-pct-lbl { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-top: 2px; }
+
+.ph-bar { height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.ph-bar-fill { height: 100%; width: 0; border-radius: 999px; background: var(--green, #46d369); transition: width .4s ease; }
+
+.ph-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin-top: 2px; }
+.ph-stat { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ph-k { font-size: 11.5px; color: var(--muted); }
+.ph-v { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+
+.ph-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: auto; }
+.ph-msg { font-size: 11px; color: var(--orange); }
+.ph-credit { font-size: 9px; color: var(--muted); opacity: 0.7; margin-left: auto; text-transform: uppercase; letter-spacing: 1px; }
+
+/* Shared button. */
+.ph-btn {
+  border: 1px solid var(--blue); background: var(--blue); color: #04101f;
+  font-weight: 700; font-size: calc(15px * var(--ui-scale, 1)); border-radius: 10px;
+  padding: calc(10px * var(--ui-scale, 1)) calc(18px * var(--ui-scale, 1)); cursor: pointer;
+}
+.ph-btn:active { filter: brightness(1.1); }
+.ph-btn-ghost { background: transparent; color: var(--text); border-color: var(--card-brd); }
+
+/* ---- settings overlay (top-anchored: the on-screen keyboard slides up from the bottom) ---- */
+.ph-overlay {
+  position: fixed; inset: 0; z-index: 52; background: var(--bg);
+  display: flex; align-items: flex-start; justify-content: center; color: var(--text); overflow: hidden;
+}
+.ph-ov-close {
+  position: absolute; top: calc(12px * var(--ui-scale, 1)); right: calc(12px * var(--ui-scale, 1));
+  z-index: 3; width: calc(46px * var(--ui-scale, 1)); height: calc(46px * var(--ui-scale, 1));
+  border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06); color: var(--text); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.ph-panel { width: min(92vw, 860px); display: flex; flex-direction: column; gap: 10px; margin-top: 2.5vh; zoom: var(--ui-scale, 1); }
+.ph-ov-title { font-size: 20px; font-weight: 800; }
+.ph-hint { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.4; }
+.ph-field-label { font-size: 13px; color: var(--muted); }
+
+.ph-url-row { display: flex; gap: 8px; }
+.ph-input {
+  padding: 12px 14px; border-radius: 10px; font-size: 17px; min-width: 0;
+  border: 1px solid var(--card-brd); background: rgba(255, 255, 255, 0.05); color: var(--text);
+}
+.ph-url-input { flex: 1 1 auto; }
+.ph-url-prefix {
+  border: 1px solid var(--card-brd); background: rgba(255, 255, 255, 0.05); color: var(--muted);
+  border-radius: 10px; padding: 0 14px; font-size: 16px; font-weight: 700; white-space: nowrap; cursor: pointer;
+}
+
+.ph-btn-row { display: flex; gap: 8px; }
+.ph-test-status { font-size: 13px; color: var(--muted); min-height: 18px; }
+
+/* Symbol/number pad. */
+.ph-pad { display: grid; grid-template-columns: repeat(9, 1fr); grid-auto-rows: 46px; gap: 7px; }
+.ph-pad-key {
+  border: 1px solid var(--card-brd); background: rgba(255, 255, 255, 0.05); color: var(--text);
+  border-radius: 10px; font-size: 18px; cursor: pointer;
+}
+.ph-pad-key:active { background: rgba(255, 255, 255, 0.12); }

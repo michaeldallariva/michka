@@ -1,0 +1,7 @@
+{
+  "name": "Alerting",
+  "description": "Watch your hosts and get alerted when something goes wrong: CPU or memory too high, a disk filling up, or a host dropping offline. Alerts show as an on-screen pop-up now, with ntfy, Telegram and webhook delivery ready to switch on. Set your own rules and thresholds.",
+  "author": "michka",
+  "version": "0.1",
+  "tag": "monitoring"
+}

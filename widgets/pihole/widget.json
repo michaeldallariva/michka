@@ -1,0 +1,7 @@
+{
+  "name": "Pi-hole",
+  "description": "Network-wide ad blocking at a glance: percent of DNS queries blocked, queries and blocks today, domains on the blocklist and active clients. Works with Pi-hole v6 (and legacy v5). The hub fetches the stats for you, so no CORS setup. Point it at your Pi-hole in the widget's settings.",
+  "author": "michka",
+  "version": "1.0",
+  "tag": "network"
+}

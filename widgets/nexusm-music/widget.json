@@ -1,6 +1,6 @@
 {
-  "name": "NexusM Music",
-  "description": "Full-screen music & music-video player for a NexusM media server",
+  "name": "NexusM Music and Video player",
+  "description": "Full-screen music & music-video player for a NexusM media server. Get your NexusM Server from https://nexusm.org",
   "author": "michka",
   "version": "2.0",
   "tag": "media"

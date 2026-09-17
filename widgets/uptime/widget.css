@@ -1,0 +1,95 @@
+/* Uptime widget — inline status list + full-screen editor overlay.
+   Shared theme tokens so templates re-skin it; flat colours only (no gradients). Sizes scale with
+   var(--ui-scale) for the four target panels. */
+
+.widget-uptime .widget-body { position: relative; display: block; }
+.up-root { width: 100%; height: 100%; display: flex; flex-direction: column; }
+
+/* Gear, top-right. */
+.up-gear {
+  position: absolute; top: 0; right: 0; z-index: 2;
+  width: 30px; height: 30px; padding: 0; border-radius: 8px;
+  border: 1px solid transparent; background: transparent; color: var(--muted); cursor: pointer;
+}
+.up-gear:active { color: var(--text); }
+
+/* Header count. */
+.up-head { display: flex; align-items: baseline; gap: 8px; padding-right: 34px; margin-bottom: 8px; }
+.up-count { font-size: calc(22px * var(--ui-scale, 1)); font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text); }
+.up-count-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+
+/* Rows. */
+.up-list { display: flex; flex-direction: column; gap: 7px; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.up-row { display: flex; align-items: center; gap: 10px; }
+.up-dot { width: 11px; height: 11px; flex: 0 0 auto; border-radius: 50%; background: var(--muted); }
+.up-dot.ok { background: var(--green, #46d369); }
+.up-dot.bad { background: var(--red, #ff5d5d); }
+.up-dot.checking { background: var(--muted); opacity: 0.5; }
+.up-main { flex: 1 1 auto; min-width: 0; }
+.up-label { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.up-url { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.up-stat { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; flex: 0 0 auto; color: var(--muted); }
+.up-stat.ok { color: var(--green, #46d369); }
+.up-stat.bad { color: var(--red, #ff5d5d); }
+
+/* Empty / setup state. */
+.up-setup {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; height: 100%; text-align: center; color: var(--text);
+}
+.up-setup-icon { color: var(--green, #46d369); }
+.up-setup-title { font-size: 16px; font-weight: 700; }
+.up-setup-hint { font-size: 12px; color: var(--muted); max-width: 90%; }
+
+/* Shared button. */
+.up-btn {
+  border: 1px solid var(--blue); background: var(--blue); color: #04101f;
+  font-weight: 700; font-size: calc(15px * var(--ui-scale, 1)); border-radius: 10px;
+  padding: calc(10px * var(--ui-scale, 1)) calc(18px * var(--ui-scale, 1)); cursor: pointer;
+}
+.up-btn:active { filter: brightness(1.1); }
+
+/* ---- editor overlay (top-anchored so the on-screen keyboard doesn't cover the fields) ---- */
+.up-overlay {
+  position: fixed; inset: 0; z-index: 52; background: var(--bg);
+  display: flex; align-items: flex-start; justify-content: center; color: var(--text); overflow: hidden;
+}
+.up-ov-close {
+  position: absolute; top: calc(12px * var(--ui-scale, 1)); right: calc(12px * var(--ui-scale, 1));
+  z-index: 3; width: calc(46px * var(--ui-scale, 1)); height: calc(46px * var(--ui-scale, 1));
+  border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06); color: var(--text); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.up-panel { width: min(92vw, 860px); display: flex; flex-direction: column; gap: 10px; margin-top: 2.5vh; zoom: var(--ui-scale, 1); }
+.up-ov-title { font-size: 20px; font-weight: 800; }
+.up-hint { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.4; }
+
+.up-edit-list { display: flex; flex-direction: column; gap: 8px; max-height: 32vh; overflow-y: auto; }
+.up-edit-row { display: flex; gap: 8px; align-items: stretch; }
+.up-edit-fields { flex: 1 1 auto; display: flex; gap: 8px; min-width: 0; }
+.up-input {
+  padding: 11px 12px; border-radius: 10px; font-size: 16px; min-width: 0;
+  border: 1px solid var(--card-brd); background: rgba(255, 255, 255, 0.05); color: var(--text);
+}
+.up-edit-label { flex: 0 0 34%; }
+.up-edit-url { flex: 1 1 auto; }
+.up-del {
+  flex: 0 0 auto; width: 46px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--card-brd); background: rgba(255, 255, 255, 0.05); color: var(--red, #ff5d5d);
+  display: flex; align-items: center; justify-content: center;
+}
+.up-del:active { background: rgba(255, 90, 90, 0.18); }
+.up-addrow {
+  align-self: flex-start; padding: 9px 16px; border-radius: 10px; cursor: pointer;
+  border: 1px dashed var(--card-brd); background: transparent; color: var(--text); font-weight: 700; font-size: 14px;
+}
+
+/* Symbol/number pad (the letter OSK lacks digits and . : / -). */
+.up-pad { display: grid; grid-template-columns: repeat(8, 1fr); grid-auto-rows: 48px; gap: 8px; }
+.up-pad-key {
+  border: 1px solid var(--card-brd); background: rgba(255, 255, 255, 0.05); color: var(--text);
+  border-radius: 10px; font-size: 19px; cursor: pointer;
+}
+.up-pad-key:active { background: rgba(255, 255, 255, 0.12); }
+.up-save { align-self: flex-start; }

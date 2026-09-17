@@ -1,0 +1,7 @@
+{
+  "name": "Docker",
+  "description": "Live Docker container monitor for this host: status, CPU, memory and network per container. Data is collected by the michka agent on the host (docker ps + docker stats) and pushed to the hub, so no Docker port needs exposing.",
+  "author": "michka",
+  "version": "1.0",
+  "tag": "containers"
+}

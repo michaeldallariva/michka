@@ -1,0 +1,7 @@
+{
+  "name": "Uptime Monitor",
+  "description": "Watch any website or service and see at a glance whether it's up, with its response time. Add your routers, NAS, Pi-hole, self-hosted apps — anything with a web address. The hub does the checks, so no browser CORS limits. A mini uptime dashboard for your LAN.",
+  "author": "michka",
+  "version": "1.0",
+  "tag": "monitoring"
+}

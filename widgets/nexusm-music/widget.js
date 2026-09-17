@@ -5,7 +5,7 @@
  * the cover/video on the left half and metadata + transport + a searchable browser on the right. A
  * semi-transparent close button tears it down and returns to the host page.
  *
- * Connection model (decided with the user): the kiosk talks DIRECTLY to NexusM (its CORS allows any
+ * Connection model: the kiosk talks DIRECTLY to NexusM (its CORS allows any
  * origin). The NexusM URL + a cached auth token live in localStorage ("michka.nexusm") — no hub
  * config. The one hub touch-point is GET /api/widget/nexusm/discover (same origin), which UDP-probes
  * the LAN for the server (browsers can't broadcast). Auth auto-detects: POST /api/auth/token with an
@@ -16,8 +16,7 @@
 (function () {
   "use strict";
 
-  var LS_KEY = "michka.nexusm";
-  var cfg = loadCfg();            // { url, token, username }
+  var cfg = { url: "", token: "", username: "admin" };   // loaded from the hub on mount (ctx.getConfig)
   var overlay = null;            // full-screen root, or null when closed
   var bodyEl = null;            // swappable content area under the close button
   var gearEl = null;            // settings gear (player only), lives on the overlay next to close
@@ -27,12 +26,15 @@
   var lastWasShuffle = false;   // when true, auto-advance picks another random item on track end
   var ctxRef = null;            // last widget ctx (for esc/t helpers)
 
-  /* ---------------- config ---------------- */
+  /* ---------------- config (server-persisted via ctx, shared across browsers) ---------------- */
   function loadCfg() {
-    try { return Object.assign({ url: "", token: "", username: "admin" }, JSON.parse(localStorage.getItem(LS_KEY)) || {}); }
-    catch (e) { return { url: "", token: "", username: "admin" }; }
+    try {
+      var o = (ctxRef && ctxRef.getConfig) ? ctxRef.getConfig() : {};
+      cfg = Object.assign({ url: "", token: "", username: "admin" }, o || {});
+    } catch (e) { cfg = { url: "", token: "", username: "admin" }; }
+    return cfg;
   }
-  function saveCfg() { try { localStorage.setItem(LS_KEY, JSON.stringify(cfg)); } catch (e) { /* ignore */ } }
+  function saveCfg() { try { if (ctxRef && ctxRef.setConfig) ctxRef.setConfig(cfg); } catch (e) { /* ignore */ } }
   // NexusM on the LAN is plain HTTP, and the kiosk URL keypad has no letters, so the scheme is fixed
   // to http:// — these helpers strip any scheme/slashes to the bare host:port and rebuild the URL.
   function stripScheme(u) { return (u || "").trim().replace(/^https?:\/\//i, "").replace(/^\/+|\/+$/g, ""); }
@@ -284,8 +286,8 @@
     removeGear();
     if (window.Michka && Michka.hideOsk) Michka.hideOsk();   // PIN uses an inline keypad, not the OSK
     bodyEl.innerHTML = "";
-    // Two-column like the connect panel: fields on the left, an inline PIN keypad on the right — so the
-    // PIN field stays visible (the bottom OSK used to cover it) and nothing is pushed off the screen.
+    // Two-column like the connect panel: fields on the left, an inline PIN keypad on the right, so the
+    // PIN field stays visible (a bottom on-screen keyboard would cover it) and nothing is pushed off-screen.
     var card = el("div", "nxm-panel connect");
     card.appendChild(el("h2", "nxm-panel-title", esc(tr("nxm.loginTitle", "Sign in to NexusM"))));
 
@@ -298,10 +300,11 @@
     user.addEventListener("focus", function () { if (window.Michka && Michka.osk) Michka.osk("text", user); });
     left.appendChild(user);
 
-    // PIN is shown as plain digits (visible while typing) and capped at 6 by the keypad.
+    // PIN is masked (a real password field → dots, not the plain digits) and capped at 6 by the keypad.
     left.appendChild(el("label", "nxm-field-label", esc(tr("nxm.pin", "PIN")) + " (6)"));
-    var pin = el("input", "nxm-input nxm-pin"); pin.type = "text"; pin.inputMode = "none";
+    var pin = el("input", "nxm-input nxm-pin"); pin.type = "password"; pin.inputMode = "none";
     pin.maxLength = 6; pin.readOnly = true; pin.value = "";
+    pin.setAttribute("autocomplete", "off"); pin.setAttribute("aria-label", tr("nxm.pin", "PIN"));
     left.appendChild(pin);
 
     var err = el("div", "nxm-err"); if (msg) err.textContent = msg;
@@ -601,15 +604,18 @@
   Michka.widget("nexusm-music", {
     render: function (ctx) {
       ctxRef = ctx;
+      loadCfg();                       // pull saved server URL/token now ctx (config) is available
       var sub = cfg.url ? (tr("nxm.connectedTo", "Connected") + ": " + ctx.esc(cfg.url)) : ctx.esc(tr("nxm.tapSetup", "Tap to set up your NexusM server"));
       return '<div class="nxm-launch">' +
         '<div class="nxm-launch-icon">' + SVG.note + "</div>" +
         '<div class="nxm-launch-sub">' + sub + "</div>" +
+        '<div class="nxm-launch-url">' + ctx.esc(tr("nxm.getServer", "Get your NexusM Server from https://nexusm.org")) + "</div>" +
         '<button class="nxm-btn nxm-launch-btn" data-open>' + ctx.esc(tr("nxm.open", "Open player")) + "</button>" +
         "</div>";
     },
     mount: function (ctx) {
       ctxRef = ctx;
+      loadCfg();
       var btn = ctx.el && ctx.el.querySelector("[data-open]");
       if (btn) btn.addEventListener("click", openPlayer);
     },
