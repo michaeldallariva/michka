@@ -1,0 +1,107 @@
+<Window x:Class="DochkaDock.DropActionEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:loc="clr-namespace:DochkaDock.Services"
+        mc:Ignorable="d"
+        Title="{loc:Loc Key=DropAction_Title}"
+        Width="440" Height="420"
+        MinWidth="380" MinHeight="380"
+        WindowStartupLocation="CenterScreen"
+        Background="#FF202024"
+        Foreground="#FFEDEDED"
+        FontFamily="Segoe UI">
+    <Window.Resources>
+        <!-- Same visual language as AppPickerWindow — flat, content-sized
+             footer buttons, only the background differs between the two. -->
+        <Style TargetType="Button" x:Key="FooterButtonBase">
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="Foreground" Value="#FFEDEDED"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="Button" x:Key="FooterButtonSecondary" BasedOn="{StaticResource FooterButtonBase}">
+            <Setter Property="Background" Value="#FF3A3A40"/>
+        </Style>
+        <Style TargetType="Button" x:Key="FooterButtonPrimary" BasedOn="{StaticResource FooterButtonBase}">
+            <Setter Property="Background" Value="#FF505058"/>
+        </Style>
+
+        <Style TargetType="TextBox" x:Key="FieldBox">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="Background" Value="#FF2B2B30"/>
+            <Setter Property="Foreground" Value="#FFEDEDED"/>
+            <Setter Property="CaretBrush" Value="#FFEDEDED"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#FF3C3C42"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="TextBlock" x:Key="FieldLabel">
+            <Setter Property="Margin" Value="0,0,0,4"/>
+            <Setter Property="Foreground" Value="#FFB0B0B6"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style TargetType="TextBlock" x:Key="FieldHint">
+            <Setter Property="Margin" Value="0,4,0,0"/>
+            <Setter Property="Foreground" Value="#FF8A8A90"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="{loc:Loc Key=DropAction_Name}" Style="{StaticResource FieldLabel}"/>
+            <TextBox x:Name="NameBox" Style="{StaticResource FieldBox}" Margin="0,0,0,14"/>
+
+            <TextBlock Text="{loc:Loc Key=DropAction_Command}" Style="{StaticResource FieldLabel}"/>
+            <Grid Margin="0,0,0,14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="CommandBox" Grid.Column="0" Style="{StaticResource FieldBox}" Margin="0,0,8,0"/>
+                <Button Grid.Column="1" Content="{loc:Loc Key=DropAction_Browse}" Style="{StaticResource FooterButtonSecondary}" Click="Browse_Click"/>
+            </Grid>
+
+            <TextBlock Text="{loc:Loc Key=DropAction_Arguments}" Style="{StaticResource FieldLabel}"/>
+            <TextBox x:Name="ArgumentsBox" Style="{StaticResource FieldBox}"/>
+            <TextBlock Style="{StaticResource FieldHint}"
+                       Text="{loc:Loc Key=DropAction_ArgumentsHint}"
+                       Margin="0,4,0,14"/>
+
+            <TextBlock Text="{loc:Loc Key=DropAction_Accept}" Style="{StaticResource FieldLabel}"/>
+            <TextBox x:Name="AcceptBox" Style="{StaticResource FieldBox}"/>
+            <TextBlock Style="{StaticResource FieldHint}" Text="{loc:Loc Key=DropAction_AcceptHint}"/>
+        </StackPanel>
+
+        <Border Grid.Row="1" BorderThickness="0,1,0,0" BorderBrush="#FF323238" Margin="0,16,0,0" Padding="0,14,0,0">
+            <DockPanel LastChildFill="False">
+                <Button Content="{loc:Loc Key=DropAction_Cancel}" Style="{StaticResource FooterButtonSecondary}" DockPanel.Dock="Left" Click="Cancel_Click"/>
+                <Button Content="{loc:Loc Key=DropAction_Save}" Style="{StaticResource FooterButtonPrimary}" DockPanel.Dock="Right" Margin="12,0,0,0" Click="Save_Click"/>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>

@@ -1,0 +1,95 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- windows10.0.19041.0 (not just net8.0-windows): unlocks the WinRT
+         Windows.Media.Control projection (GlobalSystemMediaTransportControls...)
+         used for media session mini-controls. Microsoft's own OS surface, not
+         a NuGet package - consistent with "no third-party dependencies".
+         Raises the practical minimum to Windows 10 2004+, a non-issue for an
+         app that's already Windows-11-targeted. -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <AssemblyName>DochkaDock</AssemblyName>
+    <RootNamespace>DochkaDock</RootNamespace>
+    <Platforms>x64</Platforms>
+    <Version>0.92.0.0</Version>
+    <AssemblyVersion>0.92.0.0</AssemblyVersion>
+    <FileVersion>0.92.0.0</FileVersion>
+    <Product>DochkaDock</Product>
+    <Authors>Michael DALLA RIVA</Authors>
+    <Company>Michael DALLA RIVA</Company>
+    <Description>A macOS-style dock for Windows 11</Description>
+    <RepositoryUrl>https://github.com/michaeldallariva/DochkaDock</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/michaeldallariva/DochkaDock</PackageProjectUrl>
+    <!-- NOT InvariantGlobalization: WPF's built-in control templates (e.g.
+         ContextMenu's popup) resolve a culture from the XAML "language" at
+         render time. With invariant globalization that lookup throws
+         (XamlParseException: "Cannot find non-neutral culture related to
+         'en-us'") the first time any such template opens — confirmed by
+         testing the dock icons' right-click menu. The few MB this would
+         have saved isn't worth a real correctness bug. -->
+  </PropertyGroup>
+
+  <!-- The tray icon (TrayIconManager.cs) is drawn at dev time and shipped as
+       a tiny embedded .ico, loaded via raw Win32 (CreateIconFromResourceEx)
+       instead of System.Drawing/WinForms — see the trimming note below. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\tray.ico" />
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+  <!-- Workspace icon presets: embedded straight into the assembly, same as
+       the tray icon above - IconService.GetWorkspacePresetIcon reads them
+       via GetManifestResourceStream and builds the HICON itself (the normal
+       GetIconForPath/SHGetFileInfo path needs a real file on disk, which an
+       embedded resource isn't), rather than shipping these as loose files
+       next to the exe. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\Workspaces\*.ico" />
+  </ItemGroup>
+
+  <!-- UI text per language: still a plain, directly-editable JSON file per
+       language under Languages\, but embedded straight into the assembly
+       (LocalizationService reads them via GetManifestResourceStream) rather
+       than shipped as loose files next to the exe - nothing left for a user
+       to accidentally edit/delete, and one less unsigned companion file for
+       AV/SmartScreen to flag. en.json, fr.json, de.json and nl.json have
+       real translations today; the rest are seeded as copies of en.json and
+       get translated later by editing those files directly - still no code
+       changes needed, just a rebuild to re-embed them. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Languages\*.json" />
+  </ItemGroup>
+
+  <!-- Publish as one small, framework-dependent .exe (~200 KB): requires the
+       .NET 8 Desktop Runtime on the target machine (a one-time, shared
+       ~55 MB install — the .exe itself prompts with a download link if it's
+       missing). Chosen over self-contained specifically to avoid bundling
+       the full ~70 MB WPF/WinForms runtime pack into every build; revisit
+       if this ever needs to run on machines you don't control. Only applies
+       to `dotnet publish`, so normal `dotnet build`/`dotnet run` during
+       development are unaffected.
+
+       Trimming (PublishTrimmed) is NOT used even though framework-dependent
+       deployment doesn't strictly need it for size: the .NET SDK hard-blocks
+       it for any project with UseWPF=true (error NETSDK1168) because WPF's
+       XAML/BAML loading relies on reflection the trimmer can't safely
+       trace — Microsoft doesn't consider WPF trim-compatible. Verified
+       directly against this project, not assumed. The tray icon was
+       rewritten on raw Win32 (TrayNativeMethods.cs) instead of
+       System.Windows.Forms regardless, since WinForms blocks trimming on
+       its own (NETSDK1175) and added ~22 MB uncompressed for a single
+       icon's worth of functionality. -->
+  <PropertyGroup Condition="'$(PublishSingleFile)'=='true'">
+    <SelfContained>false</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <DebugType>embedded</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>
