@@ -5,5 +5,4 @@ Description=Michka kiosk: power the panel ON (wake from screensaver sleep)
 
 [Service]
 Type=oneshot
-Environment=XDG_RUNTIME_DIR=/run/user/0
-ExecStart=/bin/sh -c 'sock=$(ls /run/user/0/ 2>/dev/null | grep -E "^wayland-[0-9]+$" | head -1); export WAYLAND_DISPLAY=$sock; wlr-randr 2>/dev/null | grep -E "^[^[:space:]]" | cut -d " " -f1 | while read o; do wlr-randr --output "$o" --on; done'
+ExecStart=/bin/sh -c 'uid=$(id -u kiosk 2>/dev/null || echo 0); sock=$(ls /run/user/$uid/ 2>/dev/null | grep -E "^wayland-[0-9]+$" | head -1); export XDG_RUNTIME_DIR=/run/user/$uid WAYLAND_DISPLAY=$sock; wlr-randr 2>/dev/null | grep -E "^[^[:space:]]" | cut -d " " -f1 | while read o; do wlr-randr --output "$o" --on; done'

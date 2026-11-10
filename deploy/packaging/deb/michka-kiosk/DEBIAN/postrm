@@ -1,11 +1,26 @@
 #!/bin/sh
 # michka-kiosk postrm: the helper units + polkit rule go away with the package; just reload systemd
 # + polkit. The hub was never elevated (it runs unprivileged as the static "michka" user), so nothing to revert.
+# On purge, also remove the "kiosk" display user/group IF this package created it (recorded in
+# /etc/michka/created-kiosk-user) — an existing account is never touched.
 set -e
 
 if [ -d /run/systemd/system ]; then
   systemctl daemon-reload >/dev/null 2>&1 || true
   systemctl reload polkit.service >/dev/null 2>&1 || true
+fi
+
+if [ "$1" = "purge" ]; then
+  if [ -f /etc/michka/created-kiosk-user ]; then
+    if getent passwd kiosk >/dev/null 2>&1; then
+      deluser --quiet --system kiosk >/dev/null 2>&1 || userdel kiosk >/dev/null 2>&1 || true
+    fi
+    rm -f /etc/michka/created-kiosk-user 2>/dev/null || true
+  fi
+  if getent group kiosk >/dev/null 2>&1; then
+    delgroup --quiet --only-if-empty kiosk >/dev/null 2>&1 || groupdel kiosk >/dev/null 2>&1 || true
+  fi
+  rmdir /etc/michka 2>/dev/null || true
 fi
 
 exit 0

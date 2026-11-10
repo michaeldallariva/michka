@@ -1,12 +1,18 @@
 #!/bin/sh
-# michka-kiosk postinst: register the helper units + polkit rule (shipped in this package) and start
-# the display. The hub stays unprivileged (runs as the static "michka" group member) — it drives the
-# kiosk through the michka-screen-* units + systemctl, authorised by /etc/polkit-1/rules.d/49-michka.rules.
+# michka-kiosk postinst: create the unprivileged "kiosk" display user, register the helper units +
+# polkit rule (shipped in this package), and start the display. The hub stays unprivileged (runs as
+# the static "michka" group member) — it drives the kiosk through the michka-screen-* units +
+# systemctl, authorised by /etc/polkit-1/rules.d/49-michka.rules. The kiosk's own cage/Chromium
+# session is a SEPARATE unprivileged "kiosk" user (not root, not michka) — see setup_kiosk_user in
+# install-helpers.sh and michka-kiosk.service for why.
 set -e
+
+. /opt/michka/lib/install-helpers.sh   # setup_kiosk_user — shared with install.sh
 
 case "$1" in
   configure)
     chmod 0755 /opt/michka/kiosk.sh 2>/dev/null || true
+    setup_kiosk_user /var/lib/michka
 
     if [ -d /run/systemd/system ]; then
       systemctl daemon-reload >/dev/null 2>&1 || true
@@ -21,6 +27,7 @@ case "$1" in
     echo "  Michka kiosk${ver:+ $ver} installed (touchscreen appliance add-on)."
     echo "    Launcher : /opt/michka/kiosk.sh"
     echo "    Service  : michka-kiosk.service  (cage + Chromium on tty1, enabled at boot)"
+    echo "    Runs as  : kiosk  (unprivileged, locked no-login system user — no root, no --no-sandbox)"
     echo "    Privilege: the hub stays UNPRIVILEGED; display actions go via the michka-screen-* units"
     echo "               + a polkit rule (/etc/polkit-1/rules.d/49-michka.rules). No root hub."
     echo "    Status   : sudo systemctl status michka-kiosk"

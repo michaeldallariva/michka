@@ -7,18 +7,28 @@ Conflicts=getty@tty1.service
 
 [Service]
 Type=simple
-User=root
-PAMName=login
+# Runs as the dedicated unprivileged "kiosk" system user (see setup_kiosk_user in
+# install-helpers.sh), NOT root. PAMName=michka-kiosk is a custom PAM service (shipped as
+# /etc/pam.d/michka-kiosk — see deploy/packaging/pam/michka-kiosk) that explicitly opens a
+# "user"/"wayland"-class logind session on seat0 for that user; the stock /etc/pam.d/login's
+# pam_systemd line carries no class= argument, which leaves a locked system account's session
+# classed as background/manager (no seat, no device ACLs). With the seat correctly assigned, logind
+# grants the DRM/input device ACLs a Wayland compositor needs via cage's libseat backend — the same
+# mechanism any unprivileged greeter (GDM/sddm) relies on. SupplementaryGroups is a defence-in-depth
+# fallback for hosts where that ACL grant doesn't cover every device. Chromium therefore runs WITHOUT
+# --no-sandbox (see kiosk.sh) — it refuses its sandbox while running as root, which is what forced
+# the flag before.
+User=kiosk
+Group=kiosk
+SupplementaryGroups=video render input audio
+PAMName=michka-kiosk
 TTYPath=/dev/tty1
 StandardInput=tty
 StandardOutput=journal
 StandardError=journal
 UtmpIdentifier=tty1
 UtmpMode=user
-Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=XDG_SESSION_TYPE=wayland
-ExecStartPre=/bin/mkdir -p /run/user/0
-ExecStartPre=/bin/chmod 0700 /run/user/0
 ExecStart=/usr/bin/cage -- /opt/michka/kiosk.sh
 Restart=always
 RestartSec=3

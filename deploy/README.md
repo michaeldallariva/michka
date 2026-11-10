@@ -37,7 +37,7 @@ account you reused is left alone.
 ### Headless hub
 
 ```bash
-sudo apt install ./michka-hub_1.0.0_amd64.deb
+sudo apt install ./michka-hub_<ver>_amd64.deb
 ```
 
 `apt` resolves the (tiny) library dependencies, asks which system user to run as (default `michka`,
@@ -49,7 +49,7 @@ systemctl status michka-hub
 # open http://<this-host-ip>:5000/ in a browser
 ```
 
-> Plain `dpkg -i michka-hub_1.0.0_amd64.deb` also works, but use `apt install ./file.deb` so
+> Plain `dpkg -i michka-hub_<ver>_amd64.deb` also works, but use `apt install ./file.deb` so
 > dependencies install automatically.
 
 ### Touchscreen appliance (optional kiosk)
@@ -59,7 +59,7 @@ On the machine physically wired to the panel, also install the kiosk add-on. It 
 full-screen dashboard on tty1 at boot:
 
 ```bash
-sudo apt install ./michka-hub_1.0.0_amd64.deb ./michka-kiosk_1.0.0_amd64.deb
+sudo apt install ./michka-hub_<ver>_amd64.deb ./michka-kiosk_<ver>_amd64.deb
 ```
 
 Installing `michka-kiosk` keeps the hub **unprivileged** and instead adds a polkit rule plus the
@@ -72,7 +72,7 @@ running as root. Removing the package removes the rule + helpers.
 On each machine you want to **report into** a hub, install the agent instead of the hub:
 
 ```bash
-sudo apt install ./michka-agent_1.0.0_amd64.deb
+sudo apt install ./michka-agent_<ver>_amd64.deb
 sudoedit /etc/default/michka-agent     # set MICHKA_ARGS="--hub http://<hub-ip>:5000 --name my-box"
 sudo systemctl start michka-agent
 ```
@@ -87,8 +87,8 @@ For non-Debian distros (or if you prefer not to use `dpkg`). The tarball bundles
 (`michka_s`) and the client (`michka_c`); `install.sh` picks the role:
 
 ```bash
-tar xzf michka-1.0.0-linux-x64.tar.gz
-cd michka-1.0.0-linux-x64
+tar xzf michka-<ver>-linux-x64.tar.gz
+cd michka-<ver>-linux-x64
 
 # Hub:
 sudo ./install.sh                 # headless hub
@@ -167,6 +167,18 @@ dotnet publish src/Monitor/Monitor.csproj -c Release -r linux-x64 -p:AssemblyNam
 Artifacts land in `deploy/dist/` with a `SHA256SUMS`. Bump `deploy/VERSION` to change the package
 version.
 
+**Optional ARM64 (e.g. Raspberry Pi) — untested, off by default.** Set `BUILD_ARM=1` to also produce
+arm64 `.deb`s + a `linux-arm64` tarball alongside the amd64 ones, in the same `./build.sh` run:
+
+```bash
+BUILD_ARM=1 ./build.sh
+```
+
+The arm64 binaries come from `BINARY_HUB_ARM64`/`BINARY_AGENT_ARM64` (same precedence as the amd64
+binaries above), loose `./michka_s-arm64`/`./michka_c-arm64` files next to `build.sh`, or a
+`dotnet publish -r linux-arm64` (the .NET SDK cross-compiles for ARM from any host). These artifacts
+have **not been validated on real ARM hardware** — treat them as experimental until tested.
+
 ---
 
 ## Upgrading
@@ -194,5 +206,5 @@ version.
   michka-kiosk` usually fixes it. Chinese text needs `fonts-noto-cjk`.
 - **Ubuntu Chromium:** Ubuntu ships Chromium as a snap; the `chromium` dependency may not resolve.
   Install a Wayland-capable Chromium/Chrome and ensure `chromium` or `chromium-browser` is on `PATH`.
-- **Architecture:** packages are `amd64` (x86-64). For ARM (e.g. a Pi), publish with
-  `-r linux-arm64` and adjust `ARCH`/`-r` accordingly.
+- **Architecture:** packages are `amd64` (x86-64) by default. For ARM (e.g. a Pi), set `BUILD_ARM=1`
+  when running `build.sh` — see "Building the packages" above. Untested on real ARM hardware.

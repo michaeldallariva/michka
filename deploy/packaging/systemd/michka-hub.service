@@ -33,9 +33,12 @@ ExecStart=/opt/michka/michka_s --db /var/lib/michka/michka.db
 # A port change in the Settings page exits the process; systemd brings it back with the new port.
 Restart=always
 RestartSec=2
-# Hardening.
+# Hardening. ProtectSystem=strict is safe with StateDirectory=michka above: systemd always keeps a
+# unit's State/Cache/Logs/RuntimeDirectory= paths writable even under "strict" (they imply
+# ReadWritePaths=), so /var/lib/michka stays writable while everything else is read-only.
 NoNewPrivileges=true
 ProtectHome=true
+ProtectSystem=strict
 ProtectKernelTunables=true
 ProtectControlGroups=true
 

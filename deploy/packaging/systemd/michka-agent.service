@@ -8,7 +8,11 @@ Type=simple
 # Runs unprivileged with no account to create: systemd allocates a transient user for this service
 # (named after the unit) at start, never written to /etc/passwd.
 DynamicUser=yes
-# Settings live in /etc/default/michka-agent (MICHKA_ARGS). At minimum it must set --hub.
+# Settings live in /etc/default/michka-agent (MICHKA_ARGS, MICHKA_TOKEN). At minimum MICHKA_ARGS must
+# set --hub. The shared token goes in MICHKA_TOKEN, not MICHKA_ARGS/$1 on ExecStart below: an
+# EnvironmentFile= var becomes a real process environment variable (read from /proc/<pid>/environ,
+# owner/root-only), whereas anything appended to the command line is world-readable via `ps`/
+# /proc/<pid>/cmdline. The agent reads MICHKA_TOKEN itself (Monitor.Modes.AgentRunner.TokenEnvVar).
 EnvironmentFile=-/etc/default/michka-agent
 # The self-contained binary unpacks bundled native libs to a cache dir at startup. It MUST be writable
 # AND exec, or dlopen() of the unpacked native libs (e_sqlite3) fails with "failed to map segment from
@@ -21,6 +25,11 @@ Environment=DOTNET_BUNDLE_EXTRACT_BASE_DIR=/var/lib/michka-agent-bundle
 ExecStart=/opt/michka/michka_c --agent $MICHKA_ARGS
 Restart=always
 RestartSec=5
+# Docker widget: DynamicUser gets NO supplementary groups, so without help it can't read
+# /var/run/docker.sock (root:docker 0660) even though `docker` is on PATH. postinst/install.sh write
+# a conditional drop-in (michka-agent.service.d/docker.conf, SupplementaryGroups=docker) when a
+# "docker" group exists on the host — not inlined here, since a bare SupplementaryGroups=docker on a
+# host with no such group would stop the unit from starting at all.
 # The agent only reads /proc + /sys and pushes over the network — lock everything else down.
 NoNewPrivileges=true
 ProtectHome=true

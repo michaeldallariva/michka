@@ -13,5 +13,9 @@ Description: Michka kiosk display add-on (cage + Chromium on tty1)
  unprivileged: this package adds a polkit rule + helper units (michka-screen-on/off) so it can
  drive the panel (screensaver screen-power, kiosk restart, exit-to-login) without running as root.
  .
+ The kiosk display session itself also runs unprivileged, as a dedicated "kiosk" system user (not
+ root) via a logind-managed seat session, so Chromium runs with its normal sandbox instead of
+ --no-sandbox.
+ .
  Designed for small touchscreens (e.g. a 1280x400 mini-rack panel). The screensaver "sleep"
  mode and Chinese font rendering need wlr-randr and fonts-noto-cjk respectively.

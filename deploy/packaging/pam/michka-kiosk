@@ -1,0 +1,10 @@
+# Michka kiosk PAM service (systemd PAMName= for michka-kiosk.service). No real authentication --
+# systemd only opens/closes a session here, it never calls pam_authenticate. Explicitly classifies
+# the session as "user"/"wayland" so systemd-logind assigns it seat0 and grants the DRM/input device
+# ACLs an unprivileged Wayland compositor needs. Without this, the dedicated "kiosk" system account's
+# session gets logind's default background/manager class (no seat, no device ACLs) under the stock
+# /etc/pam.d/login + common-session (which don't pass class=), and cage/libseat falls back to a
+# direct VT-ioctl path that requires root -- the bug this file exists to avoid.
+session required pam_loginuid.so
+session required pam_systemd.so class=user type=wayland
+session required pam_limits.so

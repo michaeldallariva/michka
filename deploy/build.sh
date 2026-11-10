@@ -3,7 +3,8 @@
 #   dist/michka-hub_<ver>_<arch>.deb        headless hub package
 #   dist/michka-kiosk_<ver>_<arch>.deb      optional kiosk display add-on
 #   dist/michka-agent_<ver>_<arch>.deb      Linux client (pushes metrics to a hub)
-#   dist/michka-<ver>-<rid>.tar.gz          generic tarball (install.sh: hub / kiosk / agent)
+#   dist/michka-hub-<ver>-<rid>.tar.gz      generic tarball: hub, install.sh supports --kiosk too
+#   dist/michka-agent-<ver>-<rid>.tar.gz    generic tarball: Linux client only (install.sh --agent)
 #   dist/SHA256SUMS
 #
 # Run on a Debian/Ubuntu host (needs dpkg-deb + tar). Provide the linux-x64 binaries by placing
@@ -41,13 +42,28 @@ publish() {
   echo "$BUILD/publish-$1-$2/$1"
 }
 
+# Warn (don't block — a build host with no .NET SDK has no choice but to rely on a provided binary)
+# when a provided (env-var or loose-file) binary predates the newest source file, so an operator never
+# silently ships a stale build the way loose ./michka_s/./michka_c binaries have before. Binaries that
+# come from a fresh `dotnet publish` in this same run never need the check — they're always current.
+warn_if_stale() {
+  local bin="$1" label="$2" newest_src
+  newest_src=$(find "$ROOT/../src/Monitor" -type f -newer "$bin" 2>/dev/null | head -1)
+  if [ -n "$newest_src" ]; then
+    echo "WARNING: $label ($bin) is OLDER than source file $newest_src -- it may be a stale build." >&2
+    echo "         Delete it, or set the matching BINARY_* env var, to force a fresh dotnet publish." >&2
+  fi
+}
+
 # resolve <assembly> <rid> <env-value> <loose-name> -> echoes a binary path or exits
 resolve_bin() {
-  local asm="$1" rid="$2" envval="$3" loose="$4" bin=""
-  bin="$envval"
-  [ -z "$bin" ] && [ -f "$ROOT/$loose" ] && bin="$ROOT/$loose"
-  [ -z "$bin" ] && [ "$HAVE_DOTNET" = 1 ] && bin=$(publish "$asm" "$rid")
+  local asm="$1" rid="$2" envval="$3" loose="$4" bin="" label=""
+  bin="$envval"; label="\$BINARY_* env"
+  if [ -z "$bin" ] && [ -f "$ROOT/$loose" ]; then bin="$ROOT/$loose"; label="loose ./$loose"; fi
+  local fresh=0
+  if [ -z "$bin" ] && [ "$HAVE_DOTNET" = 1 ]; then bin=$(publish "$asm" "$rid"); fresh=1; fi
   [ -n "$bin" ] && [ -f "$bin" ] || { echo "ERROR: $asm not found for $rid (set the matching BINARY_* env or provide $loose)" >&2; exit 1; }
+  [ "$fresh" = 1 ] || warn_if_stale "$bin" "$label providing $asm/$rid"
   echo "$bin"
 }
 
@@ -78,21 +94,24 @@ build_arch() {
 
   # ============================================================ michka-hub .deb
   local HUB="$BUILD/michka-hub-$ARCH"
-  mkdir -p "$HUB/DEBIAN" "$HUB/opt/michka" "$HUB/lib/systemd/system"
+  mkdir -p "$HUB/DEBIAN" "$HUB/opt/michka/lib" "$HUB/lib/systemd/system"
   install -m 0755 "$BIN" "$HUB/opt/michka/michka_s"
   install -m 0644 "$PKG/systemd/michka-hub.service" "$HUB/lib/systemd/system/michka-hub.service"
+  # Shared install-time helpers (run-user setup, drop-in seeding) — sourced by postinst. Same file also
+  # ships in the tarball below, so both installers run the exact same logic, not two hand-kept copies.
+  install -m 0644 "$PKG/common/install-helpers.sh" "$HUB/opt/michka/lib/install-helpers.sh"
   seed_dropins "$ROOT/../templates" "$HUB/opt/michka/templates"
   seed_dropins "$ROOT/../widgets"   "$HUB/opt/michka/widgets"
   for f in control config templates postinst prerm postrm; do cp "$PKG/deb/michka-hub/DEBIAN/$f" "$HUB/DEBIAN/$f"; done
   sed -i "s/__VERSION__/$VERSION/g" "$HUB/DEBIAN/control"; set_arch "$HUB/DEBIAN/control"
-  fixnl "$HUB/DEBIAN/"* "$HUB/lib/systemd/system/michka-hub.service"
+  fixnl "$HUB/DEBIAN/"* "$HUB/lib/systemd/system/michka-hub.service" "$HUB/opt/michka/lib/install-helpers.sh"
   chmod 0644 "$HUB/DEBIAN/control" "$HUB/DEBIAN/templates"; chmod 0755 "$HUB/DEBIAN/config" "$HUB/DEBIAN/postinst" "$HUB/DEBIAN/prerm" "$HUB/DEBIAN/postrm"
   dpkg-deb --root-owner-group --build "$HUB" "$DIST/michka-hub_${VERSION}_${ARCH}.deb" >/dev/null
   echo "==> built michka-hub_${VERSION}_${ARCH}.deb"
 
   # ========================================================== michka-kiosk .deb
   local KIO="$BUILD/michka-kiosk-$ARCH"
-  mkdir -p "$KIO/DEBIAN" "$KIO/opt/michka" "$KIO/lib/systemd/system" "$KIO/etc/polkit-1/rules.d"
+  mkdir -p "$KIO/DEBIAN" "$KIO/opt/michka" "$KIO/lib/systemd/system" "$KIO/etc/polkit-1/rules.d" "$KIO/etc/pam.d"
   install -m 0755 "$PKG/kiosk/kiosk.sh" "$KIO/opt/michka/kiosk.sh"
   install -m 0644 "$PKG/systemd/michka-kiosk.service"     "$KIO/lib/systemd/system/michka-kiosk.service"
   # Helper units + polkit rule that let the unprivileged hub (static "michka" user) drive the display without root.
@@ -101,9 +120,12 @@ build_arch() {
   install -m 0644 "$PKG/systemd/michka-kiosk-autostart-on.service"   "$KIO/lib/systemd/system/michka-kiosk-autostart-on.service"
   install -m 0644 "$PKG/systemd/michka-kiosk-autostart-off.service"  "$KIO/lib/systemd/system/michka-kiosk-autostart-off.service"
   install -m 0644 "$PKG/polkit/49-michka.rules"            "$KIO/etc/polkit-1/rules.d/49-michka.rules"
+  # PAM service the kiosk session (unprivileged "kiosk" user) opens via PAMName=, so logind assigns it
+  # a real seat0 "user" session — see deploy/packaging/pam/michka-kiosk and SystemControl.cs notes.
+  install -m 0644 "$PKG/pam/michka-kiosk"                  "$KIO/etc/pam.d/michka-kiosk"
   for f in control postinst prerm postrm; do cp "$PKG/deb/michka-kiosk/DEBIAN/$f" "$KIO/DEBIAN/$f"; done
   sed -i "s/__VERSION__/$VERSION/g" "$KIO/DEBIAN/control"; set_arch "$KIO/DEBIAN/control"
-  fixnl "$KIO/DEBIAN/"* "$KIO/opt/michka/kiosk.sh" "$KIO/lib/systemd/system/"*.service "$KIO/etc/polkit-1/rules.d/49-michka.rules"
+  fixnl "$KIO/DEBIAN/"* "$KIO/opt/michka/kiosk.sh" "$KIO/lib/systemd/system/"*.service "$KIO/etc/polkit-1/rules.d/49-michka.rules" "$KIO/etc/pam.d/michka-kiosk"
   chmod 0644 "$KIO/DEBIAN/control"; chmod 0755 "$KIO/DEBIAN/postinst" "$KIO/DEBIAN/prerm" "$KIO/DEBIAN/postrm"
   dpkg-deb --root-owner-group --build "$KIO" "$DIST/michka-kiosk_${VERSION}_${ARCH}.deb" >/dev/null
   echo "==> built michka-kiosk_${VERSION}_${ARCH}.deb"
@@ -113,7 +135,8 @@ build_arch() {
   mkdir -p "$AGT/DEBIAN" "$AGT/opt/michka" "$AGT/lib/systemd/system" "$AGT/etc/default" "$AGT/usr/lib/tmpfiles.d"
   install -m 0755 "$AGENTBIN" "$AGT/opt/michka/michka_c"
   install -m 0644 "$PKG/systemd/michka-agent.service" "$AGT/lib/systemd/system/michka-agent.service"
-  install -m 0644 "$PKG/agent/michka-agent.env" "$AGT/etc/default/michka-agent"
+  # 0600: this file holds the plaintext shared token (MICHKA_TOKEN) once the admin fills it in.
+  install -m 0600 "$PKG/agent/michka-agent.env" "$AGT/etc/default/michka-agent"
   # The agent unit extracts its bundled native libs to /var/lib/michka-agent-bundle (1777) — the noexec
   # DynamicUser StateDirectory can't hold them. Ship the tmpfiles.d rule that creates it (postinst applies it).
   install -m 0644 "$PKG/tmpfiles/michka.conf" "$AGT/usr/lib/tmpfiles.d/michka.conf"
@@ -121,36 +144,57 @@ build_arch() {
   sed -i "s/__VERSION__/$VERSION/g" "$AGT/DEBIAN/control"; set_arch "$AGT/DEBIAN/control"
   fixnl "$AGT/DEBIAN/"* "$AGT/lib/systemd/system/michka-agent.service" "$AGT/etc/default/michka-agent" "$AGT/usr/lib/tmpfiles.d/michka.conf"
   chmod 0644 "$AGT/DEBIAN/control" "$AGT/DEBIAN/conffiles"; chmod 0755 "$AGT/DEBIAN/postinst" "$AGT/DEBIAN/prerm" "$AGT/DEBIAN/postrm"
+  chmod 0600 "$AGT/etc/default/michka-agent"   # re-assert after fixnl's in-place edit (holds the plaintext token)
   dpkg-deb --root-owner-group --build "$AGT" "$DIST/michka-agent_${VERSION}_${ARCH}.deb" >/dev/null
   echo "==> built michka-agent_${VERSION}_${ARCH}.deb"
 
-  # ================================================================== tar.gz
-  local TARNAME="michka-${VERSION}-${RID}"
-  local TAR="$BUILD/tar-$ARCH/$TARNAME"
-  mkdir -p "$TAR/systemd" "$TAR/kiosk" "$TAR/agent" "$TAR/polkit" "$TAR/tmpfiles"
-  install -m 0755 "$BIN"      "$TAR/michka_s"
-  install -m 0755 "$AGENTBIN" "$TAR/michka_c"
-  install -m 0755 "$PKG/tarball/install.sh"   "$TAR/install.sh"
-  install -m 0755 "$PKG/tarball/uninstall.sh" "$TAR/uninstall.sh"
-  install -m 0644 "$PKG/systemd/michka-hub.service"             "$TAR/systemd/michka-hub.service"
-  install -m 0644 "$PKG/systemd/michka-kiosk.service"           "$TAR/systemd/michka-kiosk.service"
-  install -m 0644 "$PKG/systemd/michka-agent.service"           "$TAR/systemd/michka-agent.service"
-  install -m 0644 "$PKG/systemd/michka-screen-on.service"           "$TAR/systemd/michka-screen-on.service"
-  install -m 0644 "$PKG/systemd/michka-screen-off.service"          "$TAR/systemd/michka-screen-off.service"
-  install -m 0644 "$PKG/systemd/michka-kiosk-autostart-on.service"  "$TAR/systemd/michka-kiosk-autostart-on.service"
-  install -m 0644 "$PKG/systemd/michka-kiosk-autostart-off.service" "$TAR/systemd/michka-kiosk-autostart-off.service"
-  install -m 0644 "$PKG/polkit/49-michka.rules"                 "$TAR/polkit/49-michka.rules"
-  install -m 0755 "$PKG/kiosk/kiosk.sh"                          "$TAR/kiosk/kiosk.sh"
-  install -m 0644 "$PKG/agent/michka-agent.env"                 "$TAR/agent/michka-agent.env"
-  install -m 0644 "$PKG/tmpfiles/michka.conf"                   "$TAR/tmpfiles/michka.conf"
-  seed_dropins "$ROOT/../templates" "$TAR/templates"
-  seed_dropins "$ROOT/../widgets"   "$TAR/widgets"
-  [ -f "$ROOT/README.md" ] && install -m 0644 "$ROOT/README.md" "$TAR/README.md"
-  fixnl "$TAR/install.sh" "$TAR/uninstall.sh" "$TAR/systemd/"* "$TAR/kiosk/kiosk.sh" "$TAR/agent/michka-agent.env" "$TAR/tmpfiles/michka.conf" "$TAR/README.md" 2>/dev/null || true
-  tar -C "$BUILD/tar-$ARCH" -czf "$DIST/${TARNAME}.tar.gz" "$TARNAME"
-  echo "==> built ${TARNAME}.tar.gz"
+  # ======================================================== tar.gz (hub, incl. optional --kiosk)
+  # install.sh is shared, mode-aware (MODE=hub/--kiosk vs MODE=agent via --agent) and already fully
+  # self-contained per path — the hub/--kiosk path never touches michka_c or agent/* files, and the
+  # agent path never touches michka_s or hub/kiosk files (see install.sh) — so splitting into two
+  # tarballs needs no logic changes, just shipping each tarball only the files its path can reach.
+  local HUBTARNAME="michka-hub-${VERSION}-${RID}"
+  local HUBTAR="$BUILD/tar-$ARCH/$HUBTARNAME"
+  mkdir -p "$HUBTAR/systemd" "$HUBTAR/kiosk" "$HUBTAR/polkit" "$HUBTAR/pam" "$HUBTAR/lib"
+  install -m 0755 "$BIN" "$HUBTAR/michka_s"
+  install -m 0755 "$PKG/tarball/install.sh"   "$HUBTAR/install.sh"
+  install -m 0755 "$PKG/tarball/uninstall.sh" "$HUBTAR/uninstall.sh"
+  install -m 0644 "$PKG/common/install-helpers.sh" "$HUBTAR/lib/install-helpers.sh"
+  install -m 0644 "$PKG/systemd/michka-hub.service"                 "$HUBTAR/systemd/michka-hub.service"
+  install -m 0644 "$PKG/systemd/michka-kiosk.service"               "$HUBTAR/systemd/michka-kiosk.service"
+  install -m 0644 "$PKG/systemd/michka-screen-on.service"           "$HUBTAR/systemd/michka-screen-on.service"
+  install -m 0644 "$PKG/systemd/michka-screen-off.service"          "$HUBTAR/systemd/michka-screen-off.service"
+  install -m 0644 "$PKG/systemd/michka-kiosk-autostart-on.service"  "$HUBTAR/systemd/michka-kiosk-autostart-on.service"
+  install -m 0644 "$PKG/systemd/michka-kiosk-autostart-off.service" "$HUBTAR/systemd/michka-kiosk-autostart-off.service"
+  install -m 0644 "$PKG/polkit/49-michka.rules" "$HUBTAR/polkit/49-michka.rules"
+  install -m 0644 "$PKG/pam/michka-kiosk"       "$HUBTAR/pam/michka-kiosk"
+  install -m 0755 "$PKG/kiosk/kiosk.sh"         "$HUBTAR/kiosk/kiosk.sh"
+  seed_dropins "$ROOT/../templates" "$HUBTAR/templates"
+  seed_dropins "$ROOT/../widgets"   "$HUBTAR/widgets"
+  [ -f "$ROOT/README.md" ] && install -m 0644 "$ROOT/README.md" "$HUBTAR/README.md"
+  fixnl "$HUBTAR/install.sh" "$HUBTAR/uninstall.sh" "$HUBTAR/systemd/"* "$HUBTAR/kiosk/kiosk.sh" "$HUBTAR/pam/michka-kiosk" "$HUBTAR/lib/install-helpers.sh" "$HUBTAR/README.md" 2>/dev/null || true
+  tar -C "$BUILD/tar-$ARCH" -czf "$DIST/${HUBTARNAME}.tar.gz" "$HUBTARNAME"
+  echo "==> built ${HUBTARNAME}.tar.gz"
 
-  ARTIFACTS="$ARTIFACTS michka-hub_${VERSION}_${ARCH}.deb michka-kiosk_${VERSION}_${ARCH}.deb michka-agent_${VERSION}_${ARCH}.deb ${TARNAME}.tar.gz"
+  # ===================================================================== tar.gz (agent only)
+  local AGTTARNAME="michka-agent-${VERSION}-${RID}"
+  local AGTTAR="$BUILD/tar-$ARCH/$AGTTARNAME"
+  mkdir -p "$AGTTAR/systemd" "$AGTTAR/agent" "$AGTTAR/tmpfiles" "$AGTTAR/lib"
+  install -m 0755 "$AGENTBIN" "$AGTTAR/michka_c"
+  install -m 0755 "$PKG/tarball/install.sh"   "$AGTTAR/install.sh"
+  install -m 0755 "$PKG/tarball/uninstall.sh" "$AGTTAR/uninstall.sh"
+  # install.sh unconditionally sources lib/install-helpers.sh before branching on --agent, even though
+  # the agent path never calls into it — it still has to be present or that `.` fails.
+  install -m 0644 "$PKG/common/install-helpers.sh" "$AGTTAR/lib/install-helpers.sh"
+  install -m 0644 "$PKG/systemd/michka-agent.service" "$AGTTAR/systemd/michka-agent.service"
+  install -m 0644 "$PKG/agent/michka-agent.env"       "$AGTTAR/agent/michka-agent.env"
+  install -m 0644 "$PKG/tmpfiles/michka.conf"         "$AGTTAR/tmpfiles/michka.conf"
+  [ -f "$ROOT/README.md" ] && install -m 0644 "$ROOT/README.md" "$AGTTAR/README.md"
+  fixnl "$AGTTAR/install.sh" "$AGTTAR/uninstall.sh" "$AGTTAR/systemd/"* "$AGTTAR/agent/michka-agent.env" "$AGTTAR/tmpfiles/michka.conf" "$AGTTAR/lib/install-helpers.sh" "$AGTTAR/README.md" 2>/dev/null || true
+  tar -C "$BUILD/tar-$ARCH" -czf "$DIST/${AGTTARNAME}.tar.gz" "$AGTTARNAME"
+  echo "==> built ${AGTTARNAME}.tar.gz"
+
+  ARTIFACTS="$ARTIFACTS michka-hub_${VERSION}_${ARCH}.deb michka-kiosk_${VERSION}_${ARCH}.deb michka-agent_${VERSION}_${ARCH}.deb ${HUBTARNAME}.tar.gz ${AGTTARNAME}.tar.gz"
 }
 
 # --- amd64 (always) --------------------------------------------------------

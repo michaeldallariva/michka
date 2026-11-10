@@ -1,15 +1,20 @@
 #!/bin/sh
-# michka-agent postinst: create the service user, enable the agent, and start it once a hub is set.
+# michka-agent postinst: enable the agent and start it once a hub is set.
+#
+# NOTE: the agent runs under systemd's DynamicUser=yes (michka-agent.service) — it gets its own
+# transient identity at each start, never a pre-created static account. (This package used to also
+# create a static "michka" system user here, copy-pasted from the hub package which genuinely needs
+# one; that user was never actually used by this service and has been removed as dead code.)
 set -e
 
 case "$1" in
   configure)
-    if ! getent passwd michka >/dev/null 2>&1; then
-      adduser --system --group --no-create-home --home /var/lib/michka \
-              --shell /usr/sbin/nologin --quiet michka || \
-      useradd --system --home-dir /var/lib/michka --shell /usr/sbin/nologin michka || true
-    fi
     chmod 0755 /opt/michka/michka_c 2>/dev/null || true
+
+    # Holds the plaintext shared token (MICHKA_TOKEN) once set — re-assert 0600 on every
+    # install/upgrade, since dpkg keeps an admin-modified conffile's existing mode across upgrades
+    # (an older package version shipped this at 0644).
+    chmod 0600 /etc/default/michka-agent 2>/dev/null || true
 
     # The agent unpacks bundled native libs to an EXEC dir at startup; the DynamicUser StateDirectory
     # is noexec, so the unit uses /var/lib/michka-agent-bundle (1777). Create it now, or the service
@@ -18,6 +23,26 @@ case "$1" in
     systemd-tmpfiles --create /usr/lib/tmpfiles.d/michka.conf >/dev/null 2>&1 || true
     if [ ! -d /var/lib/michka-agent-bundle ]; then
       mkdir -p /var/lib/michka-agent-bundle && chmod 1777 /var/lib/michka-agent-bundle
+    fi
+
+    # Docker widget support: DynamicUser has no supplementary groups, so without this the agent
+    # can't read /var/run/docker.sock ("permission denied while trying to connect to the Docker
+    # daemon socket") even though `docker` is on PATH. Grant it the "docker" group via a drop-in, but
+    # only when that group already exists — a host with no Docker must not fail to start on a
+    # nonexistent group. (If Docker is installed after the agent, reinstall to pick this up:
+    # `apt install --reinstall michka-agent`.)
+    DOCKER_GROUP_ADDED=0
+    if getent group docker >/dev/null 2>&1 && [ ! -f /etc/systemd/system/michka-agent.service.d/docker.conf ]; then
+      mkdir -p /etc/systemd/system/michka-agent.service.d
+      cat > /etc/systemd/system/michka-agent.service.d/docker.conf <<'EOF'
+[Unit]
+After=docker.service
+Wants=docker.service
+
+[Service]
+SupplementaryGroups=docker
+EOF
+      DOCKER_GROUP_ADDED=1
     fi
 
     if [ -d /run/systemd/system ]; then
@@ -38,7 +63,8 @@ case "$1" in
     echo "  Michka agent${ver:+ $ver} installed."
     echo "    Binary  : /opt/michka/michka_c"
     echo "    Config  : /etc/default/michka-agent  (set MICHKA_ARGS, e.g. --hub http://HUB-HOST:5000)"
-    echo "    Service : michka-agent.service  (runs as user 'michka') — ${started}"
+    echo "    Service : michka-agent.service  (runs as a dynamic per-start user) — ${started}"
+    [ "$DOCKER_GROUP_ADDED" = 1 ] && echo "    Docker  : detected — agent added to the 'docker' group for the Docker widget"
     echo "    Status  : sudo systemctl status michka-agent"
     echo "    Authors : Michael DALLA RIVA / Patrick DUQUESNOY      Website: michka.org"
     echo ""

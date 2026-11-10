@@ -8,7 +8,7 @@
 #   sudo ./install.sh --user NAME          run the hub as NAME (skip the prompt; "root" = run as root)
 #
 # Agent (push this machine's metrics to a hub, no web UI):
-#   sudo ./install.sh --agent --hub http://HUB:5000 [--name LABEL] [--interval MS]
+#   sudo ./install.sh --agent --hub http://HUB:5000 --token HUB-TOKEN [--name LABEL] [--interval MS]
 #
 # Run from the unpacked tarball directory. Re-running upgrades the binary in place.
 set -e
@@ -19,6 +19,7 @@ PORT=""
 HUB=""
 NAME=""
 INTERVAL=""
+TOKEN=""
 RUN_USER=""   # hub run-user; empty => prompt (interactive) or default to "michka"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -34,6 +35,8 @@ while [ $# -gt 0 ]; do
     --name=*) NAME="${1#*=}" ;;
     --interval) INTERVAL="$2"; shift ;;
     --interval=*) INTERVAL="${1#*=}" ;;
+    --token) TOKEN="$2"; shift ;;
+    --token=*) TOKEN="${1#*=}" ;;
     -h|--help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
@@ -45,14 +48,14 @@ done
 
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
+# setup_run_user, seed_installed_dropins — shared with the .deb's postinst, not duplicated here.
+. "$DIR/lib/install-helpers.sh"
+
 # The agent runs unprivileged via systemd DynamicUser=yes — no account is created or needed. The hub
 # needs a STATIC system user instead (the reference dbus-daemon refuses DynamicUser bus connections,
-# which would break its systemctl-based kiosk/display actions). The run-user is chosen below.
-
-# Create/select the hub's run-user, add it to the "michka" group (the polkit grant key), and write a
-# systemd drop-in for any non-default/existing/root choice. Records a user WE create in
-# /etc/michka/created-user so uninstall can remove only that. Sets RUN_USER to the final name.
-setup_run_user() {
+# which would break its systemctl-based kiosk/display actions). The run-user is chosen below, then
+# setup_run_user() (from lib/install-helpers.sh) does the actual user/group/drop-in work.
+resolve_run_user() {
   # Resolve the name: --user wins; else prompt on a TTY; else default to michka.
   if [ -z "$RUN_USER" ]; then
     if [ -t 0 ]; then
@@ -63,39 +66,16 @@ setup_run_user() {
     fi
     [ -n "$RUN_USER" ] || RUN_USER=michka
   fi
-
-  # The "michka" group authorises the hub's kiosk/display actions via polkit; always present.
-  if ! getent group michka >/dev/null 2>&1; then
-    addgroup --system michka >/dev/null 2>&1 || groupadd -r michka >/dev/null 2>&1 || true
-  fi
-
-  if [ "$RUN_USER" = "root" ]; then
-    echo "==> Hub will run as root (no dedicated user created)."
-  elif getent passwd "$RUN_USER" >/dev/null 2>&1; then
-    echo "==> Hub will run as existing user '$RUN_USER' (added to group 'michka', otherwise untouched)."
-    adduser --quiet "$RUN_USER" michka >/dev/null 2>&1 || usermod -aG michka "$RUN_USER" >/dev/null 2>&1 || true
-  else
-    echo "==> Creating locked system user '$RUN_USER' to run the hub."
-    adduser --system --group --home /var/lib/michka --no-create-home \
-      --shell /usr/sbin/nologin "$RUN_USER" >/dev/null 2>&1 || \
-    useradd -r -M -d /var/lib/michka -s /usr/sbin/nologin "$RUN_USER" >/dev/null 2>&1 || true
-    adduser --quiet "$RUN_USER" michka >/dev/null 2>&1 || usermod -aG michka "$RUN_USER" >/dev/null 2>&1 || true
-    mkdir -p /etc/michka && echo "$RUN_USER" > /etc/michka/created-user
-  fi
-
-  # Apply a non-default run-user via a drop-in (the base unit defaults to User=michka Group=michka).
-  DROPIN=/etc/systemd/system/michka-hub.service.d/10-run-user.conf
-  if [ "$RUN_USER" != "michka" ]; then
-    mkdir -p /etc/systemd/system/michka-hub.service.d
-    if [ "$RUN_USER" = "root" ]; then
-      printf '[Service]\nUser=root\nGroup=root\n' > "$DROPIN"
-    else
-      PG=$(id -gn "$RUN_USER" 2>/dev/null || echo "$RUN_USER")
-      printf '[Service]\nUser=%s\nGroup=%s\nSupplementaryGroups=michka\n' "$RUN_USER" "$PG" > "$DROPIN"
-    fi
-  else
-    rm -f "$DROPIN" 2>/dev/null || true
-  fi
+  case "$RUN_USER" in
+    root) echo "==> Hub will run as root (no dedicated user created)." ;;
+    *)
+      if getent passwd "$RUN_USER" >/dev/null 2>&1; then
+        echo "==> Hub will run as existing user '$RUN_USER' (added to group 'michka', otherwise untouched)."
+      else
+        echo "==> Creating locked system user '$RUN_USER' to run the hub."
+      fi
+      ;;
+  esac
 }
 
 # ======================================================================= AGENT
@@ -116,14 +96,44 @@ if [ "$MODE" = "agent" ]; then
   fi
   [ -d /var/lib/michka-agent-bundle ] || { mkdir -p /var/lib/michka-agent-bundle && chmod 1777 /var/lib/michka-agent-bundle; }
 
+  # Docker widget support: DynamicUser has no supplementary groups, so without this the agent can't
+  # read /var/run/docker.sock ("permission denied while trying to connect to the Docker daemon
+  # socket") even though `docker` is on PATH. Grant it the "docker" group via a drop-in, but only
+  # when that group already exists — a host with no Docker must not fail to start on a nonexistent
+  # group. (If Docker is installed after the agent, re-run this installer to pick it up.)
+  if getent group docker >/dev/null 2>&1; then
+    install -d -m 0755 /etc/systemd/system/michka-agent.service.d
+    cat > /etc/systemd/system/michka-agent.service.d/docker.conf <<'EOF'
+[Unit]
+After=docker.service
+Wants=docker.service
+
+[Service]
+SupplementaryGroups=docker
+EOF
+    echo "==> Docker detected — agent added to the 'docker' group for the Docker widget"
+  fi
+
   if [ -n "$HUB" ]; then
     ARGS="--hub $HUB"
     [ -n "$NAME" ] && ARGS="$ARGS --name $NAME"
     [ -n "$INTERVAL" ] && ARGS="$ARGS --interval $INTERVAL"
-    printf 'MICHKA_ARGS="%s"\n' "$ARGS" > /etc/default/michka-agent
+    # Preserve an already-configured token on re-run (e.g. re-running just to change --name) unless a
+    # new --token was given, so this doesn't blank out a working setup.
+    if [ -z "$TOKEN" ] && [ -f /etc/default/michka-agent ]; then
+      TOKEN=$(sed -n 's/^MICHKA_TOKEN="\(.*\)"[[:space:]]*$/\1/p' /etc/default/michka-agent 2>/dev/null | tail -1)
+    fi
+    {
+      printf 'MICHKA_ARGS="%s"\n' "$ARGS"
+      # Kept OUT of MICHKA_ARGS deliberately: a var from this EnvironmentFile= becomes a real process
+      # environment variable (readable only via /proc/<pid>/environ, owner/root-only), whereas
+      # anything appended to the command line is world-readable via `ps`/`/proc/<pid>/cmdline`.
+      printf 'MICHKA_TOKEN="%s"\n' "$TOKEN"
+    } > /etc/default/michka-agent
   elif [ ! -f /etc/default/michka-agent ]; then
-    install -m 0644 "$DIR/agent/michka-agent.env" /etc/default/michka-agent
+    install -m 0600 "$DIR/agent/michka-agent.env" /etc/default/michka-agent
   fi
+  chmod 0600 /etc/default/michka-agent 2>/dev/null || true   # holds the plaintext token
 
   install -m 0644 "$DIR/systemd/michka-agent.service" /etc/systemd/system/michka-agent.service
   systemctl daemon-reload
@@ -131,7 +141,7 @@ if [ "$MODE" = "agent" ]; then
 
   if grep -q 'HUB-HOST' /etc/default/michka-agent 2>/dev/null; then
     echo ""
-    echo "Set the hub in /etc/default/michka-agent (MICHKA_ARGS), then:"
+    echo "Set the hub + token in /etc/default/michka-agent (MICHKA_ARGS, MICHKA_TOKEN), then:"
     echo "  sudo systemctl start michka-agent"
   else
     systemctl restart michka-agent.service
@@ -148,6 +158,7 @@ echo "==> Installing the Michka hub binary to /opt/michka"
 install -d -m 0755 /opt/michka
 install -m 0755 "$DIR/michka_s" /opt/michka/michka_s
 
+resolve_run_user
 setup_run_user
 
 echo "==> Preparing /var/lib/michka"
@@ -155,15 +166,8 @@ install -d -m 0755 /var/lib/michka
 
 # Seed the on-disk templates + widgets bundled with the tarball into the data dir the hub reads from.
 # Per-folder, never clobbering a drop-in the user changed or added, so re-running keeps customisations.
-for kind in templates widgets; do
-  [ -d "$DIR/$kind" ] || continue
-  install -d -m 0755 "/var/lib/michka/$kind"
-  for d in "$DIR/$kind"/*/; do
-    [ -d "$d" ] || continue
-    name=$(basename "$d")
-    [ -e "/var/lib/michka/$kind/$name" ] || cp -r "$d" "/var/lib/michka/$kind/$name"
-  done
-done
+seed_installed_dropins "$DIR/templates" /var/lib/michka/templates
+seed_installed_dropins "$DIR/widgets"   /var/lib/michka/widgets
 
 # Own the data dir as the run-user (systemd also re-applies this for StateDirectory on each start).
 OWN_GROUP=$(id -gn "$RUN_USER" 2>/dev/null || echo "$RUN_USER")
@@ -183,6 +187,10 @@ systemctl restart michka-hub.service
 if [ "$KIOSK" = "1" ]; then
   echo "==> Setting up the kiosk display add-on"
   install -m 0755 "$DIR/kiosk/kiosk.sh" /opt/michka/kiosk.sh
+
+  # The kiosk's own cage/Chromium session runs as a dedicated unprivileged "kiosk" user (not root,
+  # not the hub's run-user) — see setup_kiosk_user in lib/install-helpers.sh.
+  setup_kiosk_user /var/lib/michka
 
   if command -v apt-get >/dev/null 2>&1; then
     echo "    Installing the display stack via apt..."
@@ -204,12 +212,17 @@ if [ "$KIOSK" = "1" ]; then
   install -m 0644 "$DIR/systemd/michka-kiosk-autostart-off.service" /etc/systemd/system/michka-kiosk-autostart-off.service
   install -d -m 0755 /etc/polkit-1/rules.d
   install -m 0644 "$DIR/polkit/49-michka.rules" /etc/polkit-1/rules.d/49-michka.rules
+  # PAM service the kiosk session (unprivileged "kiosk" user) opens via PAMName=, so logind assigns it
+  # a real seat0 "user" session instead of the default no-seat background/manager class.
+  install -d -m 0755 /etc/pam.d
+  install -m 0644 "$DIR/pam/michka-kiosk" /etc/pam.d/michka-kiosk
 
   systemctl daemon-reload
   systemctl reload polkit.service >/dev/null 2>&1 || systemctl restart polkit.service >/dev/null 2>&1 || true
   systemctl enable michka-kiosk.service >/dev/null 2>&1 || true
   systemctl start michka-kiosk.service || \
     echo "    Kiosk did not start — check 'journalctl -u michka-kiosk' (display stack / tty1 in use)."
+  echo "    Kiosk runs as: kiosk  (unprivileged, locked no-login system user — no root, no --no-sandbox)"
 fi
 
 PORT_SHOWN=${PORT:-5000}

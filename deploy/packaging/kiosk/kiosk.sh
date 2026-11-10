@@ -11,10 +11,11 @@ if [ -f "$CONF" ]; then
 fi
 
 # Clear Chromium's HTTP cache when the hub binary changed, so a freshly-deployed embedded UI can't be
-# served stale from this persistent profile. We run as root (we own the profile), keyed on the hub
-# binary's fingerprint in a stamp file. A root hub does this itself in-process; an unprivileged
-# (DynamicUser) hub can't touch this root-owned profile, so the kiosk owns the wipe. Cookies + Local
-# Storage are left alone (widget selections / NexusM config persist).
+# served stale from this persistent profile. We run as the "kiosk" user, which owns this profile dir
+# (set up by setup_kiosk_user at install time), keyed on the hub binary's fingerprint in a stamp file.
+# A root hub (legacy/dev) does this itself in-process instead; the packaged, unprivileged hub can't
+# touch this kiosk-owned profile, so the kiosk owns the wipe. Cookies + Local Storage are left alone
+# (widget selections / NexusM config persist).
 HUB_BIN=/opt/michka/michka_s
 [ -x "$HUB_BIN" ] || HUB_BIN=/root/michka/michka_s   # rack hand-rolled layout
 STAMP="$PROFILE/.kiosk-cache-stamp"
@@ -51,7 +52,7 @@ BROWSER=$(command -v chromium || command -v chromium-browser)
 [ -z "$BROWSER" ] && { echo "kiosk.sh: chromium not found" >&2; exit 1; }
 
 exec "$BROWSER" \
-  --kiosk --no-sandbox --ozone-platform=wayland --enable-features=UseOzonePlatform \
+  --kiosk --ozone-platform=wayland --enable-features=UseOzonePlatform \
   --no-first-run --fast --fast-start --disable-translate --disable-infobars --noerrdialogs \
   --disable-session-crashed-bubble --disable-pinch --overscroll-history-navigation=0 \
   --check-for-update-interval=31536000 --user-data-dir="$PROFILE" \
