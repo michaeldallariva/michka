@@ -30,7 +30,8 @@ body[data-screen="1920x515"] { --ui-scale: 1.26; }
    dashboard fills the window and is pointer-draggable (drag/popup math assumes 1:1 px), so it scales
    per-element via the calc(* var(--ui-scale)) rules instead — both driven by the same --ui-scale. */
 .settings-top { zoom: var(--ui-scale); }                            /* shared header of every secondary screen */
-.settings-cols { zoom: var(--ui-scale); }                           /* settings groups  (scrolls in .settings-content) */
+.settings-tabs { zoom: var(--ui-scale); }                           /* settings tab strip (fixed, not in the scroll box) */
+.settings-content > * { zoom: var(--ui-scale); }                    /* settings groups  (scrolls in .settings-content) */
 .svc-toolbar, .svc-pager, .svc-list > * { zoom: var(--ui-scale); }  /* services          (rows scroll in .svc-list) */
 .vpage-body > * { zoom: var(--ui-scale); }                          /* vertical pages     (scrolls in .vpage-body) */
 
@@ -164,7 +165,7 @@ body.booting .board { opacity: 0; }
 .card-head { display: flex; align-items: baseline; justify-content: space-between; flex: 0 0 auto; }
 .card-head h2 { font-size: calc(12px * var(--ui-scale)); font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); }
 .metric-big { font-size: calc(22px * var(--ui-scale)); font-weight: 700; font-variant-numeric: tabular-nums; }
-.metric-sub, .metric-pair { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.metric-pair { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* CPU model + core/thread count under the title */
 .cpu-meta { flex: 0 0 auto; margin-top: 1px; min-width: 0; }
@@ -259,7 +260,24 @@ body.booting .board { opacity: 0; }
 .back-btn:active { transform: scale(0.97); }
 
 .settings-content { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 16px; position: relative; }
-.settings-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 40px; align-items: start; }
+
+/* Settings tab strip — one settings-group shown at a time (app.js showSettingsTab), instead of every
+   group stacked in one long scroll. */
+.settings-tabs {
+  display: flex; gap: 6px; flex: 0 0 auto; padding: 10px 16px 0; overflow-x: auto;
+}
+.settings-tabs::-webkit-scrollbar { height: 0; }
+.stab {
+  min-height: 38px; padding: 0 16px;
+  border: 1px solid var(--card-brd); border-radius: 10px; background: var(--card);
+  color: var(--muted); font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer;
+  transition: all .12s ease;
+}
+.stab.active { color: #fff; border-color: rgba(79, 140, 255, 0.6); background: rgba(79, 140, 255, 0.16); }
+.stab:active { transform: scale(0.97); }
+.settings-group[data-tab-group] { display: none; }
+.settings-group[data-tab-group].stab-active { display: block; }
+
 .settings-group {
   border: 1px solid var(--card-brd); border-radius: 14px;
   background: rgba(255,255,255,0.025); padding: 6px 16px 12px;
@@ -379,6 +397,28 @@ input[type="range"]::-moz-range-thumb {
   width: 22px; height: 22px; border-radius: 50%;
   background: #fff; border: 3px solid var(--blue); box-shadow: 0 2px 8px rgba(0,0,0,0.5);
 }
+
+/* Settings page text, +15% across the board (the page read too small). Scoped to .screen-settings
+   only, not the base selectors above — several of those (.settings-top, .back-btn, .vpage-title) are
+   shared with the Services page / dashboard vertical overlays, which should keep their own size. */
+.screen-settings .settings-top h1 { font-size: 20.7px; }
+.screen-settings .back-btn { font-size: 16.1px; }
+.screen-settings .stab { font-size: 14.95px; }
+.screen-settings .settings-group h3 { font-size: 12.65px; }
+.screen-settings .setting label { font-size: 16.1px; }
+.screen-settings .setting label small { font-size: 12.65px; }
+.screen-settings .setting .val { font-size: 14.95px; }
+.screen-settings .seg button { font-size: 14.95px; }
+.screen-settings input.num { font-size: 16.1px; }
+.screen-settings .lang-select { font-size: 16.1px; }
+.screen-settings .btn { font-size: 14.95px; }
+.screen-settings .tpl-group code { font-size: 12.65px; }
+.screen-settings .tpl-card-name { font-size: 16.1px; }
+.screen-settings .tpl-card-desc { font-size: 12.65px; }
+.screen-settings .tpl-card-meta { font-size: 11.5px; }
+.screen-settings .tpl-card-preview { font-size: 14.95px; }
+.screen-settings .ss-ticks { font-size: 12.65px; }
+.screen-settings .toast { font-size: 14.95px; }
 
 /* Screensaver overlay */
 .screensaver { position: absolute; inset: 0; z-index: 50; background: #000; }
@@ -508,6 +548,8 @@ input[type="range"]::-moz-range-thumb {
 }
 .popup > button:active { background: rgba(255,255,255,0.06); }
 .popup > button.danger { color: var(--red); }
+.popup > button:disabled { color: var(--muted); cursor: default; }
+.popup > button:disabled:active { background: transparent; }
 .popup-head { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); padding: 8px 10px 6px; }
 .chooser { max-width: 320px; }
 .chooser-list { max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
@@ -686,8 +728,8 @@ input[type="range"]::-moz-range-thumb {
 .widgets-empty-add:active { background: rgba(79,140,255,0.22); }
 
 /* ============================================================================
-   DEFAULT THEME (slate sensor-panel skin).
-   The default look is a slate sensor-panel skin: flat dark board, big
+   DEFAULT THEME — folded in from the former "Futura" template (2026-06-26).
+   The default look is now a slate sensor-panel skin: flat dark board, big
    top-left date+time clock (built by app.js's buildTopClock), centred uppercase
    headers with white-square caps, fat pill bars, flat solid fills, and Pac-Man /
    skull host-status glyphs. This block is appended after the base rules above so
@@ -732,7 +774,7 @@ html, body {
 
 /* ---------------------------- top bar / clock ---------------------------- */
 /* Hide the wordmark + the small status clock; app.js's buildTopClock adds a big
-   clock at the top-left. Also hide the SSE
+   clock that sits where the brand used to be (top-left). Also hide the SSE
    stream-connection dot (#connDot): host reachability is already shown per host
    tab (Pac-Man / skull), so the extra top-right dot just reads as a duplicate. */
 .screen-dash .brand { display: none; }
@@ -827,8 +869,6 @@ html, body {
 .card-head h2::after { margin-left: 11px; }
 /* CPU/Memory % is already shown big in the gauge centre — drop the duplicate. */
 .card-head .metric-big { display: none; }
-/* Disks' "N mounts" tag sits top-right (short enough not to clash with the title). */
-.card-head .metric-sub { position: absolute; right: 0; top: 0; }
 /* "Thermals/Load" is the longest header; trim it 10% (14->12.6px) and tighten the square caps so the
    trailing white square never wraps to a second line. In base CSS so every template that uses the
    default header (Default, Futura) inherits it; Marty hides the caps + uses a smaller header already,

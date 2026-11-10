@@ -257,8 +257,8 @@ public static class ReportPage
             return {
               animation:false,
               // Left gutter fits the widest y-axis label across all charts: byte/rate labels like
-              // "93.1 GB" or "2.1 MB/s" are wider than "%" and clip at 52 on the kiosk's font (they
-              // happened to just fit on the dev box's font). 70 keeps all four charts aligned too.
+              // "93.1 GB" or "2.1 MB/s" are wider than "%" and clip at 52 depending on the rendering
+              // font. 70 keeps all four charts aligned too.
               grid:{left:70,right:18,top:14,bottom:26},
               tooltip:{trigger:"axis", backgroundColor:"#ffffff", borderColor:"#dee2e8", textStyle:{color:"#1b1e24"}},
               legend:{right:8, top:0, textStyle:{color:axisC}, itemWidth:14, itemHeight:8},

@@ -89,5 +89,12 @@ public sealed class AgentConfig
         var dir = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(Path));
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         File.WriteAllText(Path, JsonSerializer.Serialize(this, Json));
+        // Holds the shared token in plaintext — don't leave it at the umask-default (often world-
+        // readable) permissions on a multi-user Linux box. No-op on Windows (no POSIX mode bits).
+        if (!OperatingSystem.IsWindows())
+        {
+            try { File.SetUnixFileMode(Path, UnixFileMode.UserRead | UnixFileMode.UserWrite); }
+            catch { /* best effort */ }
+        }
     }
 }

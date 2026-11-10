@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace Monitor.Services;
 
 /// <summary>
@@ -61,30 +59,5 @@ internal sealed class NullServiceInspector : IServiceInspector
     public IReadOnlyList<ServiceState> Status(IReadOnlyCollection<string> names) => Array.Empty<ServiceState>();
 }
 
-/// <summary>Shared helper: run a command, capture stdout, swallow failures.</summary>
-internal static class ProcRunner
-{
-    public static string Capture(string file, params string[] args)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo(file)
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                // Suppress the console window. Without this, the Windows agent's ~10s sc.exe catalog
-                // poll flashes a black shell on the desktop (the GUI detaches its own console with
-                // FreeConsole, so each child console app would otherwise spawn a fresh window).
-                CreateNoWindow = true,
-            };
-            foreach (var a in args) psi.ArgumentList.Add(a);
-            using var p = Process.Start(psi);
-            if (p is null) return "";
-            string outp = p.StandardOutput.ReadToEnd();
-            p.WaitForExit(5000);
-            return outp;
-        }
-        catch { return ""; }
-    }
-}
+// ProcRunner (shell a command, drain+timeout+kill) now lives in its own file, Services/ProcRunner.cs —
+// shared by the hub, the agent, and the Windows GUI, not just the service inspectors.

@@ -56,7 +56,7 @@ public static class HubHost
             WidgetsDir = widgetsDir,
         };
 
-        // Monitored services are tracked per-host.
+        // Monitored services used to be one global list (the hub's own host); they're per-host now.
         // Migrate the legacy list into this host's entry once, so existing setups keep their boxes.
         if (config.Services.Count > 0 && !config.ServicesByHost.ContainsKey(runtime.HostName))
         {
@@ -152,8 +152,11 @@ internal sealed class HubBackgroundService : BackgroundService
     private const long SvcPollMs = 2500;
 
     // Docker containers for the hub's own host, attached on the same ~10s cadence as the catalog.
+    // List() shells two sequential CLI calls (up to ~12s worst case against a wedged daemon), so it
+    // runs on a background task instead of inline — see AgentRunner's identical pattern for why.
     private readonly Monitor.Services.DockerInspector _docker = new();
     private long _dockerAtMs = -CatalogIntervalMs;
+    private Task<IReadOnlyList<Monitor.Services.DockerContainer>>? _dockerTask;
 
     public HubBackgroundService(Options opt, LiveBroadcaster broadcaster, MetricsStore store,
         HubRuntime runtime, IServiceInspector services, ILogger<HubBackgroundService> log)
@@ -195,10 +198,17 @@ internal sealed class HubBackgroundService : BackgroundService
                     try { snap.ServiceCatalog = _services.List().ToList(); _catalogAtMs = nowMs; }
                     catch (Exception ex) { _log.LogWarning(ex, "service catalog failed"); }
                 }
-                if (_docker.Available && nowMs - _dockerAtMs >= CatalogIntervalMs)
+                if (_docker.Available)
                 {
-                    try { snap.Containers = _docker.List().ToList(); _dockerAtMs = nowMs; }
-                    catch (Exception ex) { _log.LogWarning(ex, "docker list failed"); }
+                    if (_dockerTask is null && nowMs - _dockerAtMs >= CatalogIntervalMs)
+                        _dockerTask = Task.Run(_docker.List);
+
+                    if (_dockerTask is { IsCompleted: true })
+                    {
+                        try { snap.Containers = (await _dockerTask).ToList(); }
+                        catch (Exception ex) { _log.LogWarning(ex, "docker list failed"); }
+                        finally { _dockerTask = null; _dockerAtMs = nowMs; }
+                    }
                 }
 
                 _broadcaster.Publish(snap);

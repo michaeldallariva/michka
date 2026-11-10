@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Monitor.Services;
 
 namespace Monitor.Modes;
 
@@ -29,7 +30,7 @@ public static class SystemControl
         {
             await Task.Delay(600);
             if (OperatingSystem.IsLinux())
-                Run("systemctl", "restart michka-kiosk.service", log);
+                Run("systemctl", log, "restart", "michka-kiosk.service");
             log.LogInformation("restarting hub to apply server config");
             // Restart=always in the unit brings the hub back up with the new config.
             Environment.Exit(0);
@@ -46,7 +47,7 @@ public static class SystemControl
         _ = Task.Run(async () =>
         {
             await Task.Delay(400); // let the HTTP response flush first
-            Run("systemctl", "start getty@tty1.service", log);
+            Run("systemctl", log, "start", "getty@tty1.service");
         });
         return true;
     }
@@ -96,9 +97,12 @@ public static class SystemControl
 
         string state = on ? "--on" : "--off";
         // Discover the Wayland socket the same way the screenshot helper does, then toggle outputs.
+        // The kiosk session belongs to the unprivileged "kiosk" user (not root/uid 0 — see
+        // michka-kiosk.service), so resolve its uid rather than assuming 0.
         string script =
-            "sock=$(ls /run/user/0/ 2>/dev/null | grep -E '^wayland-[0-9]+$' | head -1); " +
-            "export XDG_RUNTIME_DIR=/run/user/0 WAYLAND_DISPLAY=$sock; " +
+            "uid=$(id -u kiosk 2>/dev/null || echo 0); " +
+            "sock=$(ls /run/user/$uid/ 2>/dev/null | grep -E '^wayland-[0-9]+$' | head -1); " +
+            "export XDG_RUNTIME_DIR=/run/user/$uid WAYLAND_DISPLAY=$sock; " +
             "for o in $(wlr-randr 2>/dev/null | grep -E '^[^[:space:]]' | awk '{print $1}'); do " +
             $"wlr-randr --output \"$o\" {state}; done";
         _ = Task.Run(() => Run("bash", log, "-c", script));
@@ -122,10 +126,11 @@ public static class SystemControl
     public static void ClearKioskCacheOnUpgrade(string dataDir, ILogger log)
     {
         if (!OperatingSystem.IsLinux()) return;
-        // The kiosk's Chromium profile is owned by the user the kiosk runs as (root on the rack). A
-        // non-root hub can't delete it, so it leaves the wipe to kiosk.sh, which runs as that user and
-        // does the same stamp-keyed clear before launching chromium. Skip here to avoid a half-done
-        // clear that still updates the stamp (which would suppress the kiosk-side wipe).
+        // The kiosk's Chromium profile is owned by the unprivileged "kiosk" user the kiosk display
+        // stack runs as (see michka-kiosk.service), not the hub's own run-user. A non-root hub can't
+        // delete it, so it leaves the wipe to kiosk.sh, which runs as that user and does the same
+        // stamp-keyed clear before launching chromium. Skip here to avoid a half-done clear that still
+        // updates the stamp (which would suppress the kiosk-side wipe).
         if (!IsRoot()) return;
         try
         {
@@ -159,27 +164,20 @@ public static class SystemControl
         }
     }
 
-    /// <summary>Run a command, passing each argument verbatim (no shell re-quoting).</summary>
+    /// <summary>Run a command, passing each argument verbatim (no shell re-quoting). Fire-and-forget:
+    /// the shared <see cref="ProcRunner"/> helper handles draining stdout/stderr and killing the
+    /// process if it doesn't exit within its timeout; this wrapper just logs a failure to start it.</summary>
     private static void Run(string file, ILogger log, params string[] args)
     {
         try
         {
-            var psi = new ProcessStartInfo(file)
-            {
-                RedirectStandardError = true,
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-            };
+            var psi = new ProcessStartInfo(file);
             foreach (var a in args) psi.ArgumentList.Add(a);
-            var p = Process.Start(psi);
-            p?.WaitForExit(5000);
+            ProcRunner.Run(psi);
         }
         catch (Exception ex)
         {
             log.LogWarning(ex, "command failed: {File} {Args}", file, string.Join(' ', args));
         }
     }
-
-    private static void Run(string file, string args, ILogger log)
-        => Run(file, log, args.Split(' ', StringSplitOptions.RemoveEmptyEntries));
 }

@@ -101,6 +101,10 @@ public sealed class Options
         The client reads michka_c.conf (next to the .exe; created on first run) for the hub host,
         port, scheme, name and interval. Command-line flags override the conf file.
 
+        The shared token can also be set via the MICHKA_TOKEN environment variable instead of
+        --token, so it never appears in `ps`/`systemctl show` output (preferred for services; see
+        /etc/default/michka-agent on Linux). Precedence: --token > MICHKA_TOKEN > michka_c.conf.
+
         Options:
           --agent              Force agent mode (push only, no web UI)
           --gui                (Windows) open the settings GUI

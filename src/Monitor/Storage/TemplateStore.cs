@@ -35,6 +35,7 @@ public static class TemplateStore
             if (string.IsNullOrEmpty(id) || id.StartsWith('.')) continue;
 
             string name = id, description = "", author = "", version = "1.0";
+            int order = int.MaxValue; // unspecified = sort after any template that explicitly orders itself
             var metaPath = Path.Combine(path, "template.json");
             if (File.Exists(metaPath))
             {
@@ -45,17 +46,21 @@ public static class TemplateStore
                     if (meta.TryGetProperty("description", out var d)) description = d.GetString() ?? "";
                     if (meta.TryGetProperty("author", out var a)) author = a.GetString() ?? "";
                     if (meta.TryGetProperty("version", out var v)) version = v.GetString() ?? "1.0";
+                    if (meta.TryGetProperty("order", out var o) && o.TryGetInt32(out var ov)) order = ov;
                 }
                 catch { /* malformed json — fall back to the folder name */ }
             }
 
             list.Add(new TemplateInfo(
-                id, name, description, author, version,
+                id, name, description, author, version, order,
                 HasScript: File.Exists(Path.Combine(path, "script.js")),
                 HasCss: File.Exists(Path.Combine(path, "style.css")),
                 HasPreview: File.Exists(Path.Combine(path, "preview.png"))));
         }
-        return list;
+
+        // Explicit `order` (lowest first) wins over the alphabetical directory scan above; templates
+        // that don't set one (the common case) keep sorting alphabetically by id amongst themselves.
+        return list.OrderBy(t => t.Order).ThenBy(t => t.Id, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     /// <summary>
@@ -85,10 +90,12 @@ public static class TemplateStore
         "  style.css      - layered over the default stylesheet when this template is active\n" +
         "  script.js      - injected after the default app.js when this template is active\n" +
         "  preview.png    - thumbnail shown on the template card in Settings\n\n" +
-        "Files are served at /templates/<folder>/<file>.\n";
+        "Files are served at /templates/<folder>/<file>.\n" +
+        "An optional numeric \"order\" in template.json (lower = earlier) places a template at a\n" +
+        "specific spot in the Settings grid instead of the default alphabetical-by-id ordering.\n";
 }
 
 /// <summary>Metadata for one on-disk UI template, returned by <c>GET /api/templates</c>.</summary>
 public readonly record struct TemplateInfo(
-    string Id, string Name, string Description, string Author, string Version,
+    string Id, string Name, string Description, string Author, string Version, int Order,
     bool HasScript, bool HasCss, bool HasPreview);

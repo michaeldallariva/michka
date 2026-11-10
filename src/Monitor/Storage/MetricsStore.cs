@@ -49,11 +49,11 @@ public sealed class MetricsStore : IDisposable
                 cpu     REAL    NOT NULL,
                 mem_pct REAL    NOT NULL,
                 net_rx  INTEGER NOT NULL,
-                net_tx  INTEGER NOT NULL,
-                json    TEXT    NOT NULL
+                net_tx  INTEGER NOT NULL
             );
             """);
         Exec("CREATE INDEX IF NOT EXISTS ix_samples_host_ts ON samples(host, ts);");
+        DropLegacyJsonColumn();
 
         // Per-disk free/total space over time, for the report's "disk free space" trend. Written far
         // less often than metrics (disk usage drifts slowly) so it stays tiny: one row per mount per
@@ -70,7 +70,7 @@ public sealed class MetricsStore : IDisposable
         Exec("CREATE INDEX IF NOT EXISTS ix_disk_host_ts ON disk_samples(host, ts);");
     }
 
-    public void Insert(MetricSnapshot snap, string json)
+    public void Insert(MetricSnapshot snap)
     {
         long rx = 0, tx = 0;
         foreach (var n in snap.Net) { rx += (long)n.RxBytesPerSec; tx += (long)n.TxBytesPerSec; }
@@ -79,8 +79,8 @@ public sealed class MetricsStore : IDisposable
         {
             using var cmd = _conn.CreateCommand();
             cmd.CommandText = """
-                INSERT INTO samples (host, ts, cpu, mem_pct, net_rx, net_tx, json)
-                VALUES ($host, $ts, $cpu, $mem, $rx, $tx, $json);
+                INSERT INTO samples (host, ts, cpu, mem_pct, net_rx, net_tx)
+                VALUES ($host, $ts, $cpu, $mem, $rx, $tx);
                 """;
             cmd.Parameters.AddWithValue("$host", snap.Host);
             cmd.Parameters.AddWithValue("$ts", snap.TsUnixMs);
@@ -88,7 +88,6 @@ public sealed class MetricsStore : IDisposable
             cmd.Parameters.AddWithValue("$mem", snap.Mem.Pct);
             cmd.Parameters.AddWithValue("$rx", rx);
             cmd.Parameters.AddWithValue("$tx", tx);
-            cmd.Parameters.AddWithValue("$json", json);
             cmd.ExecuteNonQuery();
         }
     }
@@ -294,6 +293,24 @@ public sealed class MetricsStore : IDisposable
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>One-time migration for databases created before 2026-10-26: <c>samples</c> used to carry
+    /// a full serialized-snapshot <c>json</c> column on every row (~1 row/sec/host), written on every
+    /// insert but never read back anywhere — by far the largest contributor to <c>michka.db</c> size.
+    /// Drops it if still present; a no-op on a fresh/already-migrated database. Safe to run on every
+    /// startup (cheap PRAGMA check when there's nothing to do).</summary>
+    private void DropLegacyJsonColumn()
+    {
+        bool hasJson;
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT 1 FROM pragma_table_info('samples') WHERE name = 'json';";
+            hasJson = cmd.ExecuteScalar() is not null;
+        }
+        if (!hasJson) return;
+        Exec("ALTER TABLE samples DROP COLUMN json;");
+        Exec("VACUUM;"); // reclaim the space the dropped column's data occupied
     }
 
     public void Dispose() => _conn.Dispose();

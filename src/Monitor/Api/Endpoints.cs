@@ -50,6 +50,12 @@ public static class Endpoints
 
             if (snap is null || string.IsNullOrWhiteSpace(snap.Host))
                 return Results.BadRequest(new { error = "host is required" });
+            // Bound unbounded growth of the hub's live per-host state (and, downstream, its SQLite
+            // history) from a misbehaving or malicious sender — see LiveBroadcaster.HasRoomFor.
+            if (snap.Host.Length > 100)
+                return Results.BadRequest(new { error = "host name too long (max 100 chars)" });
+            if (!bc.HasRoomFor(snap.Host))
+                return Results.Json(new { error = "too many distinct hosts" }, statusCode: StatusCodes.Status400BadRequest);
 
             bc.Publish(snap);
             return Results.Ok(new { ok = true });
@@ -92,7 +98,16 @@ public static class Endpoints
 
             int rows = store.DeleteHost(host);
             bc.Forget(host);
-            if (rt.Config.Layouts.Remove(host))
+
+            // Clean up every per-host key in one atomic save — not just the layout — so repeated host
+            // churn (renames, decommissions, test hosts) doesn't leave stale entries accumulating in
+            // michka.conf forever. (WidgetConfig is excluded: it's keyed by widget TYPE, not host.)
+            bool changed = false;
+            if (rt.Config.Layouts.Remove(host)) changed = true;
+            if (rt.Config.ServicesByHost.Remove(host)) changed = true;
+            if (rt.Config.WidgetsByHost.Remove(host)) changed = true;
+            if (rt.Config.HostOrder.Remove(host)) changed = true;
+            if (changed)
             {
                 try { rt.Config.Save(); } catch { /* best-effort: history is already gone */ }
             }
@@ -121,7 +136,6 @@ public static class Endpoints
         {
             port = rt.Port,
             hostName = rt.HostName,
-            version = rt.Version,
             db = rt.DbPath,
             template = rt.Config.Template,
             tokenRequired = rt.Config.TokenRequired,
@@ -140,6 +154,7 @@ public static class Endpoints
                 ssTimeout = rt.Config.SsTimeout,
                 kioskAuto = rt.Config.KioskAuto,
             },
+            hostOrder = rt.Config.HostOrder,
             services = rt.Config.Services,
             servicesByHost = rt.Config.ServicesByHost,
             layout = rt.Config.Layout,
@@ -292,11 +307,15 @@ public static class Endpoints
             return Results.Json(new { ok = r.Ok, status = r.Status, ms = r.Ms, error = r.Error }, MetricsJson.Options);
         });
 
-        // Pi-hole summary proxy (Pi-hole's API isn't CORS-enabled, so the hub fetches it). The Pi-hole
-        // base URL + password come from the browser's localStorage on the query string.
-        app.MapGet("/api/widget/pihole", async (string? @base, string? key, CancellationToken ct) =>
+        // Pi-hole summary proxy (Pi-hole's API isn't CORS-enabled, so the hub fetches it). POST with a
+        // JSON body (not a query string) so the Pi-hole password never lands in access logs, browser
+        // history, or a Referer header.
+        app.MapPost("/api/widget/pihole", async (HttpContext ctx, CancellationToken ct) =>
         {
-            var data = await PiholeClient.SummaryAsync(@base ?? "", key ?? "", ct);
+            PiholeProbe? body;
+            try { body = await JsonSerializer.DeserializeAsync<PiholeProbe>(ctx.Request.Body, MetricsJson.Options); }
+            catch (JsonException) { return Results.BadRequest(new { error = "invalid json" }); }
+            var data = await PiholeClient.SummaryAsync(body?.Base ?? "", body?.Key ?? "", ct);
             return Results.Json(data, MetricsJson.Options);
         });
 
@@ -358,6 +377,7 @@ public static class Endpoints
                 rt.Config.KioskAuto = ka; changed = true;
                 SystemControl.SetKioskAutostart(ka == "on", lf.CreateLogger("config"));
             }
+            if (body.HostOrder is { } horder) { rt.Config.HostOrder = horder; changed = true; }
             if (body.Services is { } svc)
             {
                 // With a host: that host's monitored set. Without: the legacy global list.
@@ -487,6 +507,7 @@ public static class Endpoints
         public string? SsMode { get; set; }
         public string? SsTimeout { get; set; }
         public string? KioskAuto { get; set; }
+        public List<string>? HostOrder { get; set; }
         public List<string>? Services { get; set; }
         public string? ServicesHost { get; set; }
         public List<LayoutBox>? Layout { get; set; }
@@ -512,5 +533,12 @@ public static class Endpoints
     private sealed class HostDelete
     {
         public string? Host { get; set; }
+    }
+
+    /// <summary>Pi-hole widget probe request (base URL + password, kept out of the query string).</summary>
+    private sealed class PiholeProbe
+    {
+        public string? Base { get; set; }
+        public string? Key { get; set; }
     }
 }

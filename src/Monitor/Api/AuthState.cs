@@ -73,8 +73,10 @@ public sealed class AuthState
     /// throttled.</summary>
     public void RecordSuccess(string key) => _buckets.TryRemove(key, out _);
 
-    // Occasionally drop stale buckets so the dictionary can't grow without bound under a flood from
-    // many spoofed source IPs.
+    // Occasionally drop stale rate-limit buckets and expired PIN sessions so neither dictionary can
+    // grow without bound (buckets under a flood from many spoofed source IPs; sessions from clients
+    // that disappear mid-session, e.g. a kiosk reboot, without ever calling EndSession). Piggybacks on
+    // normal traffic (any failed auth or PIN-gated request) rather than a dedicated background timer.
     private void Sweep()
     {
         long now = Environment.TickCount64;
@@ -83,6 +85,9 @@ public sealed class AuthState
         foreach (var kv in _buckets)
             if (now - kv.Value.WindowMs > WindowMs && now >= kv.Value.LockUntilMs)
                 _buckets.TryRemove(kv.Key, out _);
+        foreach (var kv in _sessions)
+            if (now >= kv.Value)
+                _sessions.TryRemove(kv.Key, out _);
     }
 
     // ---- PIN browser sessions ------------------------------------------------------------------
@@ -94,6 +99,7 @@ public sealed class AuthState
     /// <summary>Open a new PIN session, returning its opaque id (set as an httpOnly cookie).</summary>
     public string NewSession()
     {
+        Sweep();
         Span<byte> b = stackalloc byte[24];
         RandomNumberGenerator.Fill(b);
         var sid = Convert.ToBase64String(b).Replace('+', '-').Replace('/', '_').TrimEnd('=');
@@ -104,6 +110,7 @@ public sealed class AuthState
     /// <summary>True if the session id is known and unexpired; slides the expiry on use.</summary>
     public bool ValidSession(string? sid)
     {
+        Sweep();
         if (string.IsNullOrEmpty(sid)) return false;
         if (!_sessions.TryGetValue(sid, out var exp)) return false;
         long now = Environment.TickCount64;

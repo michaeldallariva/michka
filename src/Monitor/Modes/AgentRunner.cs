@@ -17,7 +17,13 @@ public static class AgentRunner
     /// <summary>The effective settings after merging <c>michka_c.conf</c> with command-line overrides.</summary>
     public readonly record struct Resolved(string? HubUrl, string? Name, int IntervalMs, string? Token);
 
-    /// <summary>CLI flags win over the conf file; the conf file fills in anything not passed.</summary>
+    /// <summary>Env var carrying the shared token, preferred over <c>--token</c> on the command line:
+    /// a CLI argument is visible to any local user via <c>ps</c>/<c>/proc/&lt;pid&gt;/cmdline</c>
+    /// (world-readable), whereas <c>/proc/&lt;pid&gt;/environ</c> is restricted to the owning user/root.
+    /// Set it via <c>systemd</c>'s <c>EnvironmentFile=</c> instead of putting <c>--token</c> in args.</summary>
+    public const string TokenEnvVar = "MICHKA_TOKEN";
+
+    /// <summary>CLI flags win over the env var, which wins over the conf file.</summary>
     public static Resolved Resolve(Options opt, AgentConfig cfg)
     {
         var hub = !string.IsNullOrWhiteSpace(opt.Hub) ? opt.Hub
@@ -26,7 +32,9 @@ public static class AgentRunner
         var name = !string.IsNullOrWhiteSpace(opt.Name) ? opt.Name
                  : !string.IsNullOrWhiteSpace(cfg.Name) ? cfg.Name
                  : null;
+        var envToken = Environment.GetEnvironmentVariable(TokenEnvVar);
         var token = !string.IsNullOrWhiteSpace(opt.Token) ? opt.Token
+                  : !string.IsNullOrWhiteSpace(envToken) ? envToken
                   : !string.IsNullOrWhiteSpace(cfg.Token) ? cfg.Token
                   : null;
         var interval = opt.IntervalSpecified ? opt.IntervalMs : cfg.IntervalMs;
@@ -87,8 +95,13 @@ public static class AgentRunner
         long lastCatalogMs = -catalogIntervalMs;
 
         // Docker containers ride along on the same sparse cadence (`docker stats` is heavy). Probed once.
+        // List() shells two sequential CLI calls (up to ~12s worst case against a wedged daemon), so it
+        // runs on a background task instead of inline — a stuck daemon would otherwise stall every
+        // metrics push until it unwedges. Only one List() runs at a time; its result is picked up on
+        // whichever tick it happens to finish on.
         const long dockerIntervalMs = 10_000;
         long lastDockerMs = -dockerIntervalMs;
+        Task<IReadOnlyList<DockerContainer>>? dockerTask = null;
 
         while (await timer.WaitForNextTickAsync(ct))
         {
@@ -102,10 +115,17 @@ public static class AgentRunner
                 try { snap.ServiceCatalog = services.List().ToList(); lastCatalogMs = nowMs; }
                 catch (Exception ex) { log($"service catalog failed: {ex.Message}"); }
             }
-            if (docker.Available && nowMs - lastDockerMs >= dockerIntervalMs)
+            if (docker.Available)
             {
-                try { snap.Containers = docker.List().ToList(); lastDockerMs = nowMs; }
-                catch (Exception ex) { log($"docker list failed: {ex.Message}"); }
+                if (dockerTask is null && nowMs - lastDockerMs >= dockerIntervalMs)
+                    dockerTask = Task.Run(docker.List);
+
+                if (dockerTask is { IsCompleted: true })
+                {
+                    try { snap.Containers = (await dockerTask).ToList(); }
+                    catch (Exception ex) { log($"docker list failed: {ex.Message}"); }
+                    finally { dockerTask = null; lastDockerMs = nowMs; }
+                }
             }
 
             try

@@ -26,6 +26,7 @@ const LANGS = [
   { code: "it", name: "Italiano" },
   { code: "ru", name: "Русский" },
   { code: "zh", name: "中文" },
+  { code: "sv", name: "Svenska" },
 ];
 let translations = {};
 function t(key, vars) {
@@ -405,6 +406,19 @@ function render() {
   if (vOpen === "svc") renderSvcStatus();
 }
 
+// Shared by renderServiceBox (dashboard service box) and renderSvcStatus (swipe-up status page) — the
+// same "up/unknown/down" classification, state text, and pid/memory meta line, just laid out into two
+// different DOM shapes.
+function svcStatusParts(st) {
+  const up = !!st.active;
+  const unknown = st.activeState === "unknown";
+  const stateText = `${st.activeState || "?"}${st.subState ? " · " + st.subState : ""}`;
+  const metaParts = [];
+  if (st.mainPid) metaParts.push("pid " + st.mainPid);
+  if (typeof st.memoryBytes === "number" && st.memoryBytes >= 0) metaParts.push(fmtBytes(st.memoryBytes));
+  return { up, unknown, stateText, metaText: metaParts.join(" · ") };
+}
+
 function renderServiceBox(el, st) {
   const nameEl = el.querySelector("[data-svc-name]");
   const stateEl = el.querySelector("[data-svc-state]");
@@ -416,14 +430,10 @@ function renderServiceBox(el, st) {
     metaEl.textContent = "";
     return;
   }
-  const up = !!st.active;
-  const unknown = st.activeState === "unknown";
-  stateEl.className = "svc-state " + (up ? "up" : unknown ? "unknown" : "down");
-  stateEl.textContent = `${st.activeState || "?"}${st.subState ? " · " + st.subState : ""}`;
-  const parts = [];
-  if (st.mainPid) parts.push("pid " + st.mainPid);
-  if (typeof st.memoryBytes === "number" && st.memoryBytes >= 0) parts.push(fmtBytes(st.memoryBytes));
-  metaEl.textContent = parts.join(" · ");
+  const p = svcStatusParts(st);
+  stateEl.className = "svc-state " + (p.up ? "up" : p.unknown ? "unknown" : "down");
+  stateEl.textContent = p.stateText;
+  metaEl.textContent = p.metaText;
 }
 
 function renderCores(cores) {
@@ -801,6 +811,12 @@ const BOX_HOLD_MS = 1200;
 // swipe (which moves fast and far, so it still cancels and lets screen navigation run). A quick
 // swipe also self-cancels by lifting before BOX_HOLD_MS elapses.
 const BOX_MOVE_CANCEL = 100;
+
+// Template extension point: a template with a non-stock box arrangement (e.g. Pulse's 2-row grid)
+// can assign its own function here to reorder+reposition standard boxes after a drag, instead of
+// the default single-row x-center sort. Reset to null on every template switch (see applyTemplate)
+// so a leftover hook can't act on behalf of a template that's no longer active.
+let boxReflowHook = null;
 function wireBox(el, box) {
   let startX = 0, startY = 0, origX = 0, origY = 0;
   let armed = false, movedSinceArm = false, holdTimer = null;
@@ -836,8 +852,13 @@ function wireBox(el, box) {
     const wasArmed = armed, wasMoved = movedSinceArm;
     teardown();
     if (wasArmed && wasMoved) {
-      // Standard box: re-tile the row so it pushes neighbours aside, gliding them into place.
-      if (!FLOATS(box.type)) { reflowStandard(); applyPositions(); }
+      // Standard box: re-tile so it pushes neighbours aside, gliding them into place. A template
+      // whose box arrangement isn't the stock single row (e.g. Pulse's 2-row grid) can install
+      // boxReflowHook to do its own 2D-aware reorder instead of the default x-center sort.
+      if (!FLOATS(box.type)) {
+        if (typeof boxReflowHook === "function") boxReflowHook(box);
+        else { reflowStandard(); applyPositions(); }
+      }
       saveLayout();                                             // persist the new arrangement
     } else if (wasArmed) {
       openBoxMenu(box, e.clientX, e.clientY);                   // held in place => menu
@@ -1131,9 +1152,20 @@ function hideOsk() {
 }
 
 /* ---------------- host tabs ---------------- */
+// Left-to-right tab order is user-customisable (long-press a tab -> Move left/right) and persists
+// server-side (michka.conf hostOrder) so it's the same on every browser/kiosk. Hosts not yet in
+// hostOrder (new ones) are appended alphabetically after the ones that are.
+let hostOrder = [];
+function orderedHostNames() {
+  const all = new Set(state.hosts.keys());
+  const ordered = hostOrder.filter((n) => all.has(n));
+  const known = new Set(ordered);
+  const rest = [...all].filter((n) => !known.has(n)).sort((a, b) => a.localeCompare(b));
+  return [...ordered, ...rest];
+}
 function renderTabs() {
   const nav = $("hostTabs");
-  const names = [...state.hosts.keys()].sort((a, b) => a.localeCompare(b));
+  const names = orderedHostNames();
   nav.innerHTML = "";
   names.forEach((name) => {
     const h = state.hosts.get(name);
@@ -1175,16 +1207,40 @@ function openHostMenu(name, x, y) {
   $("widgetChooser").classList.add("hidden");
   $("popupScrim").classList.remove("hidden");
   const m = $("hostMenu");
+  // Disable Move left/right at the ends of the tab strip instead of letting them no-op silently.
+  const names = orderedHostNames();
+  const idx = names.indexOf(name);
+  const left = m.querySelector('[data-act="moveLeft"]');
+  const right = m.querySelector('[data-act="moveRight"]');
+  if (left) left.disabled = idx <= 0;
+  if (right) right.disabled = idx < 0 || idx >= names.length - 1;
   m.classList.remove("hidden");
   positionPopup(m, x, y);
 }
 function wireHostMenu() {
   $("hostMenu").querySelectorAll("button").forEach((b) => {
     b.onclick = () => {
+      if (b.disabled) return;
       if (b.dataset.act === "remove" && pendingHost) deleteHost(pendingHost);
+      else if (b.dataset.act === "moveLeft" && pendingHost) moveHost(pendingHost, -1);
+      else if (b.dataset.act === "moveRight" && pendingHost) moveHost(pendingHost, 1);
       else closePopups();
     };
   });
+}
+
+// Shift a host tab one slot left (-1) or right (+1) in the custom order and persist it, so every
+// browser/kiosk viewing the hub shows the same arrangement (michka.conf hostOrder).
+function moveHost(name, dir) {
+  closePopups();
+  const names = orderedHostNames();
+  const idx = names.indexOf(name);
+  const swapIdx = idx + dir;
+  if (idx < 0 || swapIdx < 0 || swapIdx >= names.length) return;
+  [names[idx], names[swapIdx]] = [names[swapIdx], names[idx]];
+  hostOrder = names;
+  renderTabs();
+  postConfig({ hostOrder });
 }
 
 // Drop a host from the in-memory state (history/series/layout). Does not touch the server.
@@ -1193,6 +1249,7 @@ function forgetHostLocal(name) {
   state.latest.delete(name);
   state.series.delete(name);
   delete layoutsByHost[name];
+  hostOrder = hostOrder.filter((n) => n !== name);
 }
 
 async function deleteHost(name) {
@@ -1205,10 +1262,10 @@ async function deleteHost(name) {
   } catch { showToast(typeof t === "function" ? t("host.removeError") : "Could not remove host", "err"); return; }
 
   forgetHostLocal(name);
-  if (widgetsByHost[name]) { delete widgetsByHost[name]; postConfig({ widgetsHost: name, widgets: [] }); }
+  delete widgetsByHost[name];   // the hub's /api/hosts/delete already cleaned the server-side copy
   if (state.selected === name) {
     state.selected = null;
-    const names = [...state.hosts.keys()].sort((a, b) => a.localeCompare(b));
+    const names = orderedHostNames();
     if (names.length) selectHost(names[0]);
     else { layout = []; renderLayout(); }
   }
@@ -1280,7 +1337,7 @@ async function refreshHosts() {
     if (state.selected && !state.hosts.has(state.selected)) state.selected = null;
     renderTabs();
     if (!state.selected && state.hosts.size) {
-      selectHost([...state.hosts.keys()].sort((a, b) => a.localeCompare(b))[0]);
+      selectHost(orderedHostNames()[0]);
     }
   } catch { /* ignore */ }
 }
@@ -1308,7 +1365,7 @@ function startClock() {
   document.addEventListener("michka:settingschange", (e) => { if (e.detail && e.detail.key === "dateFmt") tickClock(); });
 }
 
-// Big top-left date+time clock (the default look)
+// Big top-left date+time clock — folded in from the former "Futura" template
 // (now the default look). Builds its own element as the first item of the
 // dashboard top bar (CSS hides the wordmark + the small status clock) and ticks
 // once a second, honouring the global "Time & date format" setting. Idempotent so
@@ -1345,7 +1402,7 @@ function applyCycle() {
   if (settings.cycle !== "on") return;
   const sec = Math.max(3, parseInt(settings.cycleSec, 10) || 10);
   cycleTimer = setInterval(() => {
-    const names = [...state.hosts.keys()].sort((a, b) => a.localeCompare(b));
+    const names = orderedHostNames();
     if (names.length < 2) return;
     const i = names.indexOf(state.selected);
     selectHost(names[(i + 1) % names.length]);
@@ -1379,7 +1436,20 @@ function showToast(msg, kind) {
   t._h = setTimeout(() => t.classList.add("hidden"), 4000);
 }
 
+// Settings page is split into tabs (Display / Server / Screensaver / Template / About) so only one
+// group's worth of controls shows at a time instead of every group stacked in one long scroll.
+function showSettingsTab(id) {
+  document.querySelectorAll(".settings-tabs .stab").forEach((b) => b.classList.toggle("active", b.dataset.tab === id));
+  document.querySelectorAll(".settings-group[data-tab-group]").forEach((g) => g.classList.toggle("stab-active", g.dataset.tabGroup === id));
+  const content = document.querySelector(".settings-content");
+  if (content) content.scrollTop = 0;
+}
+
 function wireSettings() {
+  document.querySelectorAll(".settings-tabs .stab").forEach((b) => {
+    b.onclick = () => showSettingsTab(b.dataset.tab);
+  });
+
   // Navigation: edge pull tabs / back buttons / swipe between the three screens
   $("pullTab").onclick = () => goToScreen(2);     // right edge  -> settings
   $("pullTabL").onclick = () => goToScreen(0);    // left edge   -> services
@@ -1538,6 +1608,9 @@ async function loadServerConfig() {
     $("srvHub").textContent = `${c.hostName} : ${c.port}`;
     $("srvPlatform").textContent = c.platform || "--";
 
+    hostOrder = Array.isArray(c.hostOrder) ? c.hostOrder.slice() : [];
+    if (state.hosts.size) renderTabs();
+
     monitoredByHost = (c.servicesByHost && typeof c.servicesByHost === "object") ? c.servicesByHost : {};
     monitored = monitoredFor(state.selected);
     // Per-host layouts; the legacy global `layout` becomes the seed/default for hosts without one.
@@ -1555,7 +1628,7 @@ async function loadServerConfig() {
     Object.keys(wbh).forEach((h) => {
       widgetsByHost[h] = (Array.isArray(wbh[h]) ? wbh[h] : []).map((type) => ({ id: type, type }));
     });
-    migrateLocalWidgets();   // one-time: seed the server from any old per-browser localStorage widget state
+    migrateLocalWidgets();   // one-time: seed the server from old per-browser localStorage (pre-2026-07)
     if (vOpen === "widgets") renderWidgets();
 
     applyTemplate(c.template || "");
@@ -1605,6 +1678,7 @@ function applyTemplate(id) {
   const prev = settings.template;
   if (prev) document.body.classList.remove(prev.toLowerCase() + "-design");
   if (id) document.body.classList.add(id.toLowerCase() + "-design");
+  boxReflowHook = null;   // the outgoing template's hook (if any) no longer applies
 
   const css = $("tplCss");
   if (css) {
@@ -2027,16 +2101,13 @@ function renderSvcStatus() {
   }
   svcs.forEach((st, i) => {
     const c = grid.children[i]; if (!c) return;
-    const up = !!st.active, unknown = st.activeState === "unknown";
-    c.querySelector("[data-d]").className = "svc-dot " + (up ? "up" : unknown ? "" : "down");
+    const p = svcStatusParts(st);
+    c.querySelector("[data-d]").className = "svc-dot " + (p.up ? "up" : p.unknown ? "" : "down");
     c.querySelector("[data-n]").textContent = svcShort(st.name);
     const sEl = c.querySelector("[data-s]");
-    sEl.className = "svc-state " + (up ? "up" : unknown ? "unknown" : "down");
-    sEl.textContent = `${st.activeState || "?"}${st.subState ? " · " + st.subState : ""}`;
-    const parts = [];
-    if (st.mainPid) parts.push("pid " + st.mainPid);
-    if (typeof st.memoryBytes === "number" && st.memoryBytes >= 0) parts.push(fmtBytes(st.memoryBytes));
-    c.querySelector("[data-m]").textContent = parts.join(" · ");
+    sEl.className = "svc-state " + (p.up ? "up" : p.unknown ? "unknown" : "down");
+    sEl.textContent = p.stateText;
+    c.querySelector("[data-m]").textContent = p.metaText;
   });
 }
 
@@ -2044,7 +2115,8 @@ function renderSvcStatus() {
    Widget *types* are discovered from the hub (GET /api/widgets) — each is a folder under the
    on-disk widgets/ dir shipping a widget.js that registers a renderer + lifecycle via the public
    Michka.widget() API. Their scripts/styles are lazy-loaded once on first use. Placed widgets
-   persist per host in localStorage (no server round-trip yet); see WidgetStore on the hub. */
+   persist server-side per host (michka.conf widgetsByHost, via /api/server-config), so the same
+   host page shows the same widgets in every browser; see WidgetStore on the hub. */
 
 // Public widget API exposed to widget.js modules. A widget registers a renderer (required) plus
 // optional mount/unmount lifecycle hooks; everything else (discovery, persistence, the card chrome)
@@ -2065,6 +2137,146 @@ window.Michka.hideOsk = function () { hideOsk(); };
 window.Michka.keepAwake = function (on) {
   ssKeepAwake = !!on;
   if (ssKeepAwake) applyScreensaver();   // re-arm so the pending timer can't fire while held
+};
+
+// Public template-lifecycle API. A UI template's script.js (Futura, Marty, LAZY, Pulse, …) used to
+// hand-roll the same ~15-line pattern itself: tear down a previous live-reload instance, stash a
+// per-instance state object on window, add/remove a `body.<id>-design` class, run a tick() on a ~1s
+// interval that self-stops once `settings.template` no longer names it, and remove its injected DOM +
+// clear its timer on stop. Michka.template() does all of that once, so a template's script.js only
+// supplies what's actually specific to it.
+//   id              - the template id (matches settings.template, e.g. "Futura").
+//   impl.tick(D)    - called every impl.intervalMs (default 1000) while this template is active, incl.
+//                     once synchronously before the first interval tick. D is the instance's own state
+//                     object (impl.state's fields, plus .timer/.stop) — mutate it freely; it's the same
+//                     object passed to every tick() and to teardown().
+//   impl.teardown(D)- optional; extra cleanup beyond the generic timer/DOM/class removal (dispose
+//                     charts, clear an extra timer, hand board positioning back to the core engine, …).
+//   impl.state      - optional; extra fields merged into the instance object D alongside .timer.
+//   impl.dataAttr   - optional; defaults to `data-<id lowercased>` — injected DOM carrying this
+//                     attribute is removed on teardown.
+//   impl.intervalMs - optional; defaults to 1000.
+// Returns D, so a template that needs more than the tick loop (e.g. a second timer, or a one-time
+// side effect that must happen after D.stop exists) can do it right after this call.
+window.Michka.template = function (id, impl) {
+  const slot = "__mtpl_" + id;
+  if (window[slot]) { try { window[slot].stop(); } catch (e) { /* ignore */ } }
+
+  const cls = id.toLowerCase() + "-design";
+  const dataAttr = impl.dataAttr || ("data-" + id.toLowerCase());
+  const D = window[slot] = Object.assign({ timer: null }, impl.state || {});
+  document.body.classList.add(cls);
+
+  function stop() {
+    if (D.timer) { clearInterval(D.timer); D.timer = null; }
+    if (typeof impl.teardown === "function") impl.teardown(D);
+    document.querySelectorAll("[" + dataAttr + "]").forEach((e) => e.remove());
+    document.body.classList.remove(cls);
+    if (window[slot] === D) window[slot] = null;
+  }
+  D.stop = stop;
+
+  function tick() {
+    if (typeof settings !== "undefined" && settings.template !== id) { stop(); return; }
+    impl.tick(D);
+  }
+  tick();
+  D.timer = setInterval(tick, impl.intervalMs || 1000);
+  return D;
+};
+
+// Shared icons + a reusable "settings overlay" controller for widgets that pop a full-screen takeover
+// (gear icon → edit panel): the gear/close SVGs, the scrim's pointer/touch/wheel stopPropagation
+// wiring, the OSK-popping text-field helper, the no-OSK numeric-field helper, and the digit/symbol pad
+// the kiosk's letter-only OSK can't cover (no "." ":" "/" "-" etc). Several widgets (alerting, uptime,
+// pihole) used to each hand-roll an identical copy of all of this.
+window.Michka.icons = {
+  gear: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  close: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+};
+
+// window.Michka.settingsOverlay(cls) returns a controller a widget creates ONCE, at module load, and
+// reuses for every open/close of its settings takeover:
+//   var ov = Michka.settingsOverlay("up");   // cls = this widget's class prefix, e.g. ".up-overlay"
+//   ov.open(function (panel, closeBtn) {
+//     closeBtn.title = tr("uptime.close", "Close");           // widget sets its own i18n text
+//     panel.appendChild(...);                                 // build the panel's own content
+//     ov.wireText(someInput);                                 // OR ov.wireNum(numericInput)
+//     panel.appendChild(ov.buildPad());                       // optional extra keys: buildPad(["_"])
+//   });
+//   ov.close();
+// ov.overlay / ov.input are exposed (not just internal) since a widget occasionally needs to reach
+// into the live panel while it's open (e.g. to re-render a row in place).
+window.Michka.settingsOverlay = function (cls) {
+  var self = { overlay: null, input: null };
+
+  self.open = function (build) {
+    self.close();
+    self.overlay = document.createElement("div");
+    self.overlay.className = cls + "-overlay";
+    ["pointerdown", "pointermove", "pointerup", "touchstart", "touchmove", "touchend", "wheel"]
+      .forEach(function (ev) { self.overlay.addEventListener(ev, function (e) { e.stopPropagation(); }, { passive: true }); });
+
+    var closeBtn = document.createElement("button");
+    closeBtn.className = cls + "-ov-close";
+    closeBtn.innerHTML = window.Michka.icons.close;
+    closeBtn.addEventListener("click", self.close);
+    self.overlay.appendChild(closeBtn);
+
+    var panel = document.createElement("div");
+    panel.className = cls + "-panel";
+    self.overlay.appendChild(panel);
+    document.body.appendChild(self.overlay);
+
+    build(panel, closeBtn);
+    return panel;
+  };
+
+  self.close = function () {
+    if (!self.overlay) return;
+    if (window.Michka.hideOsk) window.Michka.hideOsk();
+    self.input = null;
+    self.overlay.remove();
+    self.overlay = null;
+  };
+
+  // Tapping the field tracks it for buildPad() AND pops the letter keyboard (names/hostnames/URLs).
+  self.wireText = function (input) {
+    input.addEventListener("focus", function () {
+      self.input = input;
+      if (window.Michka.osk) window.Michka.osk("text", input, function () { input.dispatchEvent(new Event("input")); });
+    });
+  };
+
+  // Numeric-only fields driven solely by buildPad() (no OSK popup — it would compete with an
+  // always-visible side keypad some widgets use for these).
+  self.wireNum = function (input) {
+    input.addEventListener("focus", function () { self.input = input; });
+  };
+
+  // extraKeys are inserted before the backspace/clear keys (e.g. pihole's ["_"]).
+  self.buildPad = function (extraKeys) {
+    var keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", ".", ":", "/", "-"]
+      .concat(extraKeys || []).concat(["⌫", "✕"]);
+    var pad = document.createElement("div");
+    pad.className = cls + "-pad";
+    keys.forEach(function (k) {
+      var b = document.createElement("button");
+      b.className = cls + "-pad-key";
+      b.textContent = k;
+      b.addEventListener("click", function () {
+        if (!self.input) return;
+        if (k === "⌫") self.input.value = self.input.value.slice(0, -1);
+        else if (k === "✕") self.input.value = "";
+        else self.input.value += k;
+        self.input.dispatchEvent(new Event("input"));
+      });
+      pad.appendChild(b);
+    });
+    return pad;
+  };
+
+  return self;
 };
 
 let widgetDefs = {};                  // type -> server metadata { id, name, description, tag, hasCss, hasIcon }
@@ -2188,7 +2400,13 @@ function widgetCtx(w, el) {
     el: el || null,
     meta: widgetDefs[w.type] || {},
     t, esc, fmtBytes,
-    api: (path) => fetch(path).then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
+    // GET when no body is passed; POST a JSON body (never a query string, so secrets like a widget's
+    // saved password don't land in access logs/history/Referer) when one is.
+    api: (path, body) => fetch(path, body ? {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    } : undefined).then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
     // Server-persisted per-type config (replaces each widget's old localStorage). getConfig returns a
     // clone of the saved blob ({} if none); setConfig saves it (round-trips to michka.conf) so it's the
     // same in every browser.
@@ -2341,7 +2559,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   setTimeout(revealBoard, 1500);            // safety net: never leave the board hidden if config/template load stalls
   await loadLang(settings.lang);  // English by default; applies translations + the initial board render
   startClock();
-  buildTopClock();   // big top-left clock (default look)
+  buildTopClock();   // big top-left clock (default look, folded in from Futura)
   initCursorAutoHide();
   ensureWidgetCatalog();   // discover on-disk widget types in the background (state loads via loadServerConfig)
   wireSettings();

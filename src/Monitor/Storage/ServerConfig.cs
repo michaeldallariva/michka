@@ -36,6 +36,11 @@ public sealed class ServerConfig
     // A single "*" entry disables the Host check entirely.
     public List<string> HostAllow { get; set; } = new();
 
+    // Custom left-to-right order of the dashboard's host tabs (host names). Hosts not listed here
+    // (new/never-reordered ones) fall back to alphabetical order, appended after the ones that are
+    // listed. Set by long-pressing a host tab -> Move left/right.
+    public List<string> HostOrder { get; set; } = new();
+
     // Kiosk autostart — whether michka-kiosk.service launches the dashboard automatically at boot
     // ("on") or must be started manually ("off"). Toggling it enables/disables the systemd unit.
     public string KioskAuto { get; set; } = "on";  // "on" | "off"
@@ -84,8 +89,8 @@ public sealed class ServerConfig
     public Dictionary<string, List<LayoutBox>> Layouts { get; set; } = new();
 
     // Swipe-down Widgets-page placements, per host: the ordered list of placed widget type ids (one of
-    // each type per host). Stored server-side so the same host page shows the same widgets in every
-    // browser/session, like <see cref="Layouts"/>.
+    // each type per host). Stored server-side (it used to live in per-browser localStorage) so the same
+    // host page shows the same widgets in every browser/session, like <see cref="Layouts"/>.
     public Dictionary<string, List<string>> WidgetsByHost { get; set; } = new();
 
     // Saved per-widget-type config blobs — a widget's own settings (weather towns, Pi-hole URL/password,
@@ -166,11 +171,4 @@ public sealed class HubRuntime
 
     /// <summary>On-disk directory where users drop custom widget folders (next to the db/config).</summary>
     public required string WidgetsDir { get; init; }
-
-    public string Version => AppInfo.Version;
-}
-
-public static class AppInfo
-{
-    public const string Version = "1.0";
 }

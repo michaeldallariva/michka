@@ -42,6 +42,17 @@ public sealed class LiveBroadcaster
     /// host hasn't reported one (no Docker, or not yet); an empty list means Docker with no containers.</summary>
     public List<DockerContainer>? Containers(string host) => _dockers.GetValueOrDefault(host);
 
+    /// <summary>Hard ceiling on distinct hosts the hub keeps live state for. The caches below are keyed
+    /// by host name and never pruned except by an explicit host-delete, so without this a token holder
+    /// (or an open LAN with tokenRequired=off) could grow them unboundedly by pushing many distinct host
+    /// names. Comfortably above any realistic homelab/rack (a few dozen hosts at most).</summary>
+    private const int MaxHosts = 200;
+
+    /// <summary>True when <paramref name="host"/> is already known, or there's still room under
+    /// <see cref="MaxHosts"/> for a new one. Check before <see cref="Publish"/> to reject a snapshot
+    /// that would grow the live host set past the cap.</summary>
+    public bool HasRoomFor(string host) => _latest.ContainsKey(host) || _latest.Count < MaxHosts;
+
     /// <summary>Accept a snapshot: stamp host/ts if missing, persist, cache, broadcast.</summary>
     public void Publish(MetricSnapshot snap)
     {
@@ -70,7 +81,7 @@ public sealed class LiveBroadcaster
         var json = JsonSerializer.Serialize(snap, MetricsJson.Options);
 
         _latest[snap.Host] = snap;
-        try { _store.Insert(snap, json); } catch { /* never let storage errors break the live feed */ }
+        try { _store.Insert(snap); } catch { /* never let storage errors break the live feed */ }
 
         // Throttled disk-space history (one row per mount per ~5 min) for the report's free-space trend.
         if (snap.Disks.Count > 0)

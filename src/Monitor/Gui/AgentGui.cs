@@ -6,6 +6,7 @@ using System.Security.Principal;
 using System.Windows.Forms;
 using Monitor.Cli;
 using Monitor.Modes;
+using Monitor.Services;
 using Monitor.Storage;
 
 namespace Monitor.Gui;
@@ -118,7 +119,7 @@ internal sealed class AgentForm : Form
         gHub.Controls.Add(_scheme);
 
         gHub.Controls.Add(new Label { Text = "Host (IP or FQDN)", AutoSize = true, Location = new Point(14, 60) });
-        _host = new TextBox { Location = new Point(120, 56), Size = new Size(296, 24), PlaceholderText = "192.168.0.115  or  hub.example.com" };
+        _host = new TextBox { Location = new Point(120, 56), Size = new Size(296, 24), PlaceholderText = "192.168.0.10  or  hub.example.com" };
         _host.TextChanged += (_, _) => UpdateUrlPreview();
         gHub.Controls.Add(_host);
 
@@ -143,8 +144,13 @@ internal sealed class AgentForm : Form
         gAgent.Controls.Add(_interval);
 
         gAgent.Controls.Add(new Label { Text = "Token", AutoSize = true, Location = new Point(14, 96) });
-        _token = new TextBox { Location = new Point(120, 92), Size = new Size(296, 24), PlaceholderText = "shared secret — copy from the hub's michka.conf" };
+        // Masked by default (shoulder-surfing / screen-share / screenshot exposure of the shared
+        // secret) with a "Show" toggle, since the user does need to visually verify a pasted token.
+        _token = new TextBox { Location = new Point(120, 92), Size = new Size(230, 24), PlaceholderText = "shared secret — copy from the hub's michka.conf", UseSystemPasswordChar = true };
         gAgent.Controls.Add(_token);
+        var showToken = new CheckBox { Text = "Show", AutoSize = true, Location = new Point(356, 95) };
+        showToken.CheckedChanged += (_, _) => _token.UseSystemPasswordChar = !showToken.Checked;
+        gAgent.Controls.Add(showToken);
 
         // ---- Action buttons ----
         _btnSave = new Button { Text = "Save", Location = new Point(14, 358), Size = new Size(96, 30) };
@@ -332,22 +338,24 @@ internal sealed class AgentForm : Form
     /// <summary>Run an sc.exe command. Service changes need admin, so elevate via the UAC prompt.</summary>
     private bool RunSc(string args, bool elevate)
     {
+        bool useShell = elevate && !IsAdministrator();
         try
         {
-            var psi = new ProcessStartInfo("sc.exe", args) { UseShellExecute = elevate && !IsAdministrator() };
-            if (psi.UseShellExecute) psi.Verb = "runas";   // trigger UAC for the privileged sc command
-            else { psi.RedirectStandardOutput = true; psi.RedirectStandardError = true; psi.CreateNoWindow = true; }
-            using var p = Process.Start(psi)!;
-            if (!psi.UseShellExecute)
+            if (useShell)
             {
-                var so = p.StandardOutput.ReadToEnd() + p.StandardError.ReadToEnd();
+                // A UAC-elevated launch can't redirect output (Windows doesn't allow combining
+                // UseShellExecute=true with it), so this can't go through the shared ProcRunner helper
+                // — and it waits unbounded deliberately, since it's gated on the user actually clicking
+                // through the UAC prompt, not something a short timeout should race against.
+                var psi = new ProcessStartInfo("sc.exe", args) { UseShellExecute = true, Verb = "runas" };
+                using var p = Process.Start(psi)!;
                 p.WaitForExit();
-                if (p.ExitCode != 0) Log($"sc {args.Split(' ')[0]} failed ({p.ExitCode}): {so.Trim()}");
+                if (p.ExitCode != 0) Log($"sc {args.Split(' ')[0]} failed ({p.ExitCode}).");
                 return p.ExitCode == 0;
             }
-            p.WaitForExit();
-            if (p.ExitCode != 0) Log($"sc {args.Split(' ')[0]} failed ({p.ExitCode}).");
-            return p.ExitCode == 0;
+            var r = ProcRunner.Run(new ProcessStartInfo("sc.exe") { Arguments = args });
+            if (!r.Ok) Log($"sc {args.Split(' ')[0]} failed ({(r.TimedOut ? "timed out" : r.ExitCode)}): {r.Output.Trim()}");
+            return r.Ok;
         }
         catch (Exception ex)
         {
@@ -360,11 +368,8 @@ internal sealed class AgentForm : Form
     {
         try
         {
-            var psi = new ProcessStartInfo(file, args) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
-            using var p = Process.Start(psi)!;
-            var output = p.StandardOutput.ReadToEnd() + p.StandardError.ReadToEnd();
-            p.WaitForExit();
-            return (p.ExitCode == 0, output);
+            var r = ProcRunner.Run(new ProcessStartInfo(file) { Arguments = args });
+            return (r.Ok, r.Output);
         }
         catch { return (false, ""); }
     }
@@ -463,7 +468,15 @@ internal sealed class AgentForm : Form
     {
         if (IsDisposed) return;
         void Append() => _log.AppendText($"{DateTime.Now:HH:mm:ss}  {msg}{Environment.NewLine}");
-        if (_log.InvokeRequired) { try { _log.BeginInvoke((Action)Append); } catch { } }
+        // Swallow only the handle-is-going-away races (the form closing between the IsDisposed check
+        // above and this call, or the control's handle not being created yet) — anything else is a
+        // real bug and should surface instead of vanishing silently.
+        if (_log.InvokeRequired)
+        {
+            try { _log.BeginInvoke((Action)Append); }
+            catch (ObjectDisposedException) { }
+            catch (InvalidOperationException) { }
+        }
         else Append();
     }
 }

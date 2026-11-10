@@ -7,8 +7,9 @@ namespace Monitor.Services;
 /// <summary>
 /// Hub-side proxy for the on-disk Pi-hole widget. Pi-hole's web API doesn't send CORS headers, so the
 /// kiosk browser can't call it directly — it asks the hub, which fetches server-side and returns a
-/// normalised summary. The user's Pi-hole URL + password live in the browser's localStorage and ride
-/// in on the query string.
+/// normalised summary. The user's Pi-hole URL + password are server-persisted (michka.conf
+/// widgetConfig.pihole, via ctx.getConfig/setConfig) and sent to this proxy in a POST body, never a
+/// query string, so the password never lands in access logs, browser history, or a Referer header.
 ///
 /// Supports the current Pi-hole v6 REST API (POST /api/auth → SID, then GET /api/stats/summary) and
 /// falls back to the legacy v5 PHP API (/admin/api.php?summaryRaw&amp;auth=&lt;token&gt;). v6 limits

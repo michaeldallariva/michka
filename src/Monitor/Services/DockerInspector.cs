@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 
@@ -110,26 +109,7 @@ public sealed class DockerInspector
 
     // Run the docker CLI with a hard timeout (kills a wedged daemon call instead of blocking the
     // sampler). Returns stdout, or "" on any failure/timeout.
-    private static string Run(int timeoutMs, params string[] args)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo("docker")
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            foreach (var a in args) psi.ArgumentList.Add(a);
-            using var p = Process.Start(psi);
-            if (p is null) return "";
-            var stdout = p.StandardOutput.ReadToEndAsync();
-            if (!p.WaitForExit(timeoutMs)) { try { p.Kill(true); } catch { /* ignore */ } return ""; }
-            return stdout.GetAwaiter().GetResult();
-        }
-        catch { return ""; }
-    }
+    private static string Run(int timeoutMs, params string[] args) => ProcRunner.Capture("docker", timeoutMs, args);
 
     private static IEnumerable<string> SplitLines(string s) =>
         string.IsNullOrEmpty(s)

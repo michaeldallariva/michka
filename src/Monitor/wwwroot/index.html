@@ -85,10 +85,17 @@
           <span class="spacer"></span>
         </header>
 
-        <div class="settings-content">
-          <div class="settings-cols">
+        <nav class="settings-tabs" id="settingsTabs">
+          <button class="stab active" data-tab="display" data-i18n="settings.display">Display</button>
+          <button class="stab" data-tab="server" data-i18n="settings.server">Server</button>
+          <button class="stab" data-tab="screensaver" data-i18n="settings.screensaver">Screensaver</button>
+          <button class="stab" data-tab="template" data-i18n="settings.template">Template</button>
+          <button class="stab" data-tab="about" data-i18n="about.title">About</button>
+        </nav>
 
-            <div class="settings-group">
+        <div class="settings-content">
+
+            <div class="settings-group stab-active" data-tab-group="display">
               <h3 data-i18n="settings.display">Display</h3>
               <div class="setting">
                 <label data-i18n="settings.language">Language</label>
@@ -125,7 +132,7 @@
               </div>
             </div>
 
-            <div class="settings-group">
+            <div class="settings-group" data-tab-group="server">
               <h3 data-i18n="settings.server">Server</h3>
               <div class="setting">
                 <label><span data-i18n="settings.httpPort">HTTP port</span><small data-i18n="settings.httpPortHint">changing this restarts the UI</small></label>
@@ -167,9 +174,7 @@
               </div>
             </div>
 
-          </div>
-
-          <div class="settings-group ss-group">
+          <div class="settings-group ss-group" data-tab-group="screensaver">
             <h3 data-i18n="settings.screensaver">Screensaver</h3>
             <div class="setting">
               <label><span data-i18n="settings.ssMode">Mode</span><small data-i18n="settings.ssModeHint">shown after inactivity — Eye of Sauron, Michka the bear, black, or panel sleep</small></label>
@@ -194,7 +199,7 @@
             </div>
           </div>
 
-          <div class="settings-group tpl-group">
+          <div class="settings-group tpl-group" data-tab-group="template">
             <h3 data-i18n="settings.template">Template</h3>
             <div class="setting">
               <label><span data-i18n="settings.uiTemplate">UI template</span><small data-i18n-html="settings.uiTemplateHint">drop custom templates into the <code>templates/</code> folder next to the database</small></label>
@@ -211,7 +216,7 @@
             </div>
           </div>
 
-          <div class="settings-group about-group">
+          <div class="settings-group about-group" data-tab-group="about">
             <h3 data-i18n="about.title">About</h3>
             <div class="setting info">
               <label data-i18n="about.authors">Authors</label>
@@ -219,7 +224,7 @@
             </div>
             <div class="setting info">
               <label data-i18n="about.hubVersion">Hub version</label>
-              <span class="val" data-i18n="about.hubVersionVal">Beta 0.5</span>
+              <span class="val" data-i18n="about.hubVersionVal">1.7 (October 2026)</span>
             </div>
             <div class="setting info">
               <label data-i18n="about.website">Website</label>
@@ -257,7 +262,7 @@
 
     <!-- ===================== Vertical page: Widgets (swipe down) ===================== -->
     <!-- Slides down from the top over the dashboard; a per-host board of small app-connector widgets
-         (e.g. a NexusM music player). Scaffolded now; real connectors land later. -->
+         (gpu-temp, nexusm-music, weather, docker, uptime, pihole, alerting — see widgets/). -->
     <section class="vpage vpage-widgets" id="vpageWidgets" aria-hidden="true">
       <header class="settings-top">
         <span class="host-pill" id="widgetsHostPill"><span class="host-pill-dot"></span><span id="widgetsHost">--</span></span>
@@ -299,6 +304,14 @@
     </div>
     <div id="hostMenu" class="popup hidden" role="menu">
       <div class="popup-head" id="hostMenuTitle">Host</div>
+      <button data-act="moveLeft" role="menuitem">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        <span data-i18n="host.moveLeft">Move left</span>
+      </button>
+      <button data-act="moveRight" role="menuitem">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>
+        <span data-i18n="host.moveRight">Move right</span>
+      </button>
       <button data-act="remove" class="danger" role="menuitem">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
         <span data-i18n="host.remove">Remove this host</span>

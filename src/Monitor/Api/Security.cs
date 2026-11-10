@@ -65,27 +65,12 @@ public static class Security
             && string.Equals(o.Authority, ctx.Request.Host.Value, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Guard an agent-only endpoint (ingest): the shared token is mandatory. Returns an error
-    /// result when unauthorized, or null to proceed.</summary>
-    public static IResult? RequireToken(HttpContext ctx, string? token)
-        => HasValidToken(ctx, token) ? null
-            : Results.Json(new { error = "unauthorized" }, statusCode: StatusCodes.Status401Unauthorized);
-
     /// <summary>Guard a dashboard/admin endpoint (settings, host delete, system actions): a genuine
     /// same-origin page request <i>or</i> the shared token. Returns an error result when unauthorized,
     /// or null to proceed.</summary>
     public static IResult? RequireBrowserOrToken(HttpContext ctx, string? token)
         => (IsSameOriginRequest(ctx) || HasValidToken(ctx, token)) ? null
             : Results.Json(new { error = "forbidden" }, statusCode: StatusCodes.Status403Forbidden);
-
-    /// <summary>Generate a fresh URL-safe shared secret (~32 chars). Kept for any caller that wants a
-    /// long token; new configs use <see cref="NewShortToken"/> for a human-copyable one.</summary>
-    public static string NewToken()
-    {
-        Span<byte> bytes = stackalloc byte[24];
-        RandomNumberGenerator.Fill(bytes);
-        return Convert.ToBase64String(bytes).Replace('+', '-').Replace('/', '_').TrimEnd('=');
-    }
 
     // Token alphabet with look-alike characters removed (no 0/O, 1/I/l) so the short token is easy to
     // read off the screen and type into an agent without mistakes.
