@@ -1,52 +1,38 @@
-Michka — Cross-platform Hardware Monitor Dashboard
-Copyright (c) 2025–2026 michka.org
-Authors : Michael DALLA RIVA / Patrick DUQUESNOY
-Updated : 27-June-2026
+# Michka License
 
-================================================================================
-MICHKA LICENSE
-================================================================================
+**Michka — Cross-platform Hardware Monitor Dashboard**
+Copyright (c) 2025-2026 michka.org
+Authors: Michael Dalla Riva / Patrick Duquesnoy
+Updated: 11-Nov-2026
 
-This software is released under the Creative Commons
-Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+## License
 
-  You may share it freely and you may modify it and distribute your own
-  modified versions, as long as you give appropriate credit and indicate any
-  changes. You may NOT use it commercially (no commercial sale or use).
+This software is released under the PolyForm Noncommercial License 1.0.0.
 
-  Full license: https://creativecommons.org/licenses/by-nc/4.0/legalcode
+You may use, copy, modify and share it freely for noncommercial purposes, including sharing your own modified versions. You may NOT use it, or any modified version of it, for a commercial purpose without a separate license from the author.
 
-================================================================================
-THIRD-PARTY COMPONENTS
-================================================================================
+Full license: https://polyformproject.org/licenses/noncommercial/1.0.0/
 
-Michka bundles or depends on the following open-source libraries. Components
-marked [Windows] ship only in the Windows client (michka_c.exe); components
-marked [frontend] are JavaScript assets embedded in the dashboard.
+## Third-Party Components
 
-  Package / Library                                  License        Copyright
-  ─────────────────────────────────────────────────  ─────────────  ─────────────────────────────────────────
-  .NET 10 Runtime & ASP.NET Core                     MIT            .NET Foundation and Contributors
-  Microsoft.Data.Sqlite 10.0.x                       MIT            .NET Foundation and Contributors
-  Microsoft.Extensions.FileProviders.Embedded 10.0.x MIT            .NET Foundation and Contributors
-  Microsoft.Extensions.Hosting.WindowsServices 10.0.x  [Windows]    .NET Foundation and Contributors        (MIT)
-  System.Management 10.0.x  [Windows]                MIT            .NET Foundation and Contributors
-  ─────────────────────────────────────────────────  ─────────────  ─────────────────────────────────────────
-  SQLitePCLRaw 2.x (bundle_e_sqlite3, transitive)    Apache-2.0     Eric Sink / SQLitePCLRaw contributors
-  Apache ECharts 5.x  [frontend]                     Apache-2.0     The Apache Software Foundation
-  ─────────────────────────────────────────────────  ─────────────  ─────────────────────────────────────────
-  SQLite database engine (native e_sqlite3)          Public Domain  D. Richard Hipp / SQLite authors
-  ─────────────────────────────────────────────────  ─────────────  ─────────────────────────────────────────
+Michka bundles or depends on the following third-party components. Items marked **[Windows]** ship only in the Windows client (`michka_c.exe`). Items marked **[frontend]** are JavaScript assets embedded in the dashboard.
 
-The Windows client additionally calls native Windows OS components (gdi32 /
-D3DKMT for GPU telemetry, pdh.dll performance counters, WMI, and sc.exe for
-service control). These are part of Microsoft Windows and are not bundled or
-redistributed by Michka.
+| Component | License | Copyright |
+|---|---|---|
+| .NET 10 Runtime & ASP.NET Core | MIT | .NET Foundation and Contributors |
+| Microsoft.Data.Sqlite 10.0.x | MIT | .NET Foundation and Contributors |
+| Microsoft.Extensions.FileProviders.Embedded 10.0.x | MIT | .NET Foundation and Contributors |
+| Microsoft.Extensions.Hosting.WindowsServices 10.0.x [Windows] | MIT | .NET Foundation and Contributors |
+| System.Management 10.0.x [Windows] | MIT | .NET Foundation and Contributors |
+| SQLitePCLRaw 2.x (bundle_e_sqlite3, transitive dependency) | Apache-2.0 | Eric Sink / SQLitePCLRaw contributors |
+| Apache ECharts 5.x [frontend] | Apache-2.0 | The Apache Software Foundation |
+| SQLite database engine (native e_sqlite3) | Public Domain | D. Richard Hipp / SQLite authors |
 
---------------------------------------------------------------------------------
-License texts:
-  MIT            https://opensource.org/licenses/MIT
-  Apache-2.0     https://www.apache.org/licenses/LICENSE-2.0
-  Public Domain  https://www.sqlite.org/copyright.html
-  CC BY-NC       https://creativecommons.org/licenses/by-nc/4.0/legalcode
-================================================================================
+The Windows client also calls native Microsoft Windows components (gdi32, D3DKMT for GPU telemetry, pdh.dll performance counters, WMI, sc.exe for service control). These are part of the Windows operating system and are not bundled or redistributed by Michka.
+
+## License Texts
+
+- MIT License: https://opensource.org/licenses/MIT
+- Apache License 2.0: https://www.apache.org/licenses/LICENSE-2.0
+- SQLite (Public Domain): https://www.sqlite.org/copyright.html
+- PolyForm Noncommercial License 1.0.0: https://polyformproject.org/licenses/noncommercial/1.0.0/
