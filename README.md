@@ -7,7 +7,7 @@ temperatures. Designed to fill a **1280x400, 1424x280, 1920x440 and 1920x515** t
 Other machines on the network can push their own stats to the hub, and you can tap to switch which
 host you're viewing.
 
-<img width="1200" height="630" alt="michka" src="https://github.com/user-attachments/assets/8e6c508a-c129-4983-83bd-401269d60381" />
+<img width="1731" height="909" alt="image" src="https://github.com/user-attachments/assets/5eec2db8-6542-4555-a879-9a18ec018715" />
 <img width="2072" height="442" alt="screenshot-1" src="https://github.com/user-attachments/assets/8935edbe-e7f6-4e90-95dd-19815d3bce19" />
 <img width="1451" height="454" alt="Image" src="https://github.com/user-attachments/assets/18b6955b-9adc-418e-8444-0be10277fad0" />
 <img width="1450" height="456" alt="Image" src="https://github.com/user-attachments/assets/6e4686bf-f070-442a-8d21-21aa4d609aa1" />
